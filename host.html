@@ -2,6 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
+<meta name="robots" content="noindex">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Team-Quiz · Moderation</title>
 <link rel="stylesheet" href="style.css">
@@ -17,6 +18,7 @@
     <button id="bNext" title="Weiter (→)">▶</button>
     <button id="bJoin" title="QR-Code / Beitritt anzeigen">📱 Beitritt</button>
     <button id="bLock" title="Neue Teams sperren/erlauben"></button>
+    <button id="bRemote" title="Tablet als Moderator-Fernbedienung verbinden">🎛 Tablet</button>
     <button id="bAudioLoad" title="Lokale Audiodateien laden">🎵 Audio laden</button>
     <button id="bAdmin" title="Teams bearbeiten / Punkte korrigieren">⚙︎</button>
     <input type="file" id="audioFiles" accept="audio/*" multiple class="hidden">
@@ -24,7 +26,7 @@
   <div class="main">
     <div class="stage" id="stage"></div>
     <div class="side" id="side">
-      <div class="score"><h3>Punktestand</h3><ol id="scoreList"></ol></div>
+      <div class="score"><h3>Teams</h3><ol id="scoreList"></ol></div>
       <div id="adminBox" class="hidden">
         <div class="controls">
           <button id="bResetItem">Aktuelle Frage zurücksetzen</button>

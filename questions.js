@@ -3,7 +3,8 @@
 //   mc          – Multiple Choice, 4 Antworten, correct = Index 0..3
 //                 optional: img (Bild über der Frage, z.B. "img/pizza.jpg"), audio (Dateiname in /audio), revealAudio, multiplier (z.B. 2 fürs Finale), category
 //   interactive – Aufgabe, Punkte vergibt der Host per Klick (+30 / +15)
-//   pause       – Pause mit Countdown (minutes)
+//   pause       – Pause mit Countdown (minutes) + Punktestand
+//   standings   – Zwischenstand (Punkte werden NUR bei pause/standings/end angezeigt)
 //   end         – Siegerehrung
 // note = Moderationstext (nur im Moderator-Fenster / Notizen sichtbar, nicht für Teams).
 window.QUIZ = {
@@ -206,6 +207,12 @@ window.QUIZ = {
       title: "🎯 Schnitzeljagd!",
       text: "Die gewählte Person bringt als Erste nach vorne: einen Schuh, eine 2-Euro-Münze, einen Kugelschreiber und ein Handyfoto, auf dem ein Tier zu sehen ist. Das Team darf suchen helfen, aber nur die gewählte Person darf laufen! 1. Platz: +30, 2. Platz: +15.",
       note: "Vollständigkeit prüfen, dann Punkte vergeben. Überleitung danach: „Genug gerannt – zurück auf die große Bühne.“"
+    },
+    {
+      type: "standings",
+      title: "📊 Zwischenstand – noch 3 Fragen!",
+      text: "Jetzt wird's eng – im Finale gibt es doppelte Punkte.",
+      note: "Spannung aufbauen: Wer kann noch aufholen?"
     },
     {
       type: "mc", category: "Musik",

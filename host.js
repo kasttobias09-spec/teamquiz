@@ -13,10 +13,14 @@
   let S;
   try { S = JSON.parse(localStorage.getItem(STORE)) || newState(); } catch { S = newState(); }
   if (S.idx >= ITEMS.length) S.idx = 0;
+  if (!S.remoteKey) S.remoteKey = Math.random().toString(36).slice(2, 12);
+  const SCORE_TYPES = ["pause", "standings", "end"]; // nur hier wird der Punktestand gezeigt
+  const scoreVisible = () => SCORE_TYPES.includes(item().type);
   const save = () => localStorage.setItem(STORE, JSON.stringify(S));
 
   const conns = new Map(); // teamId -> DataConnection
-  let showJoin = false, showNotes = false, admin = false;
+  const remotes = new Set(); // Tablet-Fernbedienungen
+  let showJoin = false, showRemote = false, showNotes = false, admin = false;
 
   const item = () => ITEMS[S.idx];
   const mult = it => it.multiplier || 1;
@@ -85,6 +89,14 @@
 
   function onData(conn, d) {
     if (!d || typeof d !== "object") return;
+    if (d.t === "remote") {
+      if (d.key !== S.remoteKey) return conn.send({ t: "reject", reason: "Ungültiger Fernbedienungs-Link. Bitte QR-Code neu scannen." });
+      conn.isRemote = true; remotes.add(conn);
+      conn.on("close", () => { remotes.delete(conn); render(); });
+      sendRemote(conn); render();
+      return;
+    }
+    if (d.t === "cmd" && conn.isRemote) return remoteCmd(d);
     if (d.t === "join") {
       let id = d.teamId && S.teams[d.teamId] ? d.teamId : null;
       if (!id) {
@@ -128,7 +140,8 @@
 
   function viewFor(id) {
     const it = item(), st = standings();
-    const v = { t: "state", idx: S.idx, type: it.type, phase: S.phase, name: S.teams[id].name, score: score(id), rank: rankOf(id, st), teams: st.length };
+    const v = { t: "state", idx: S.idx, type: it.type, phase: S.phase, name: S.teams[id].name, teams: st.length };
+    if (scoreVisible()) { v.score = score(id); v.rank = rankOf(id, st); }
     if (it.type === "mc") {
       v.category = it.category; v.mult = mult(it);
       if (S.phase !== "show") { v.q = it.q; v.a = it.a; }
@@ -136,14 +149,14 @@
       if (S.phase === "open") v.remainingMs = Math.max(0, ANS_MS - (Date.now() - S.openedAt));
       const my = (S.answers[S.idx] || {})[id];
       v.myChoice = my ? my.choice : null;
-      if (my) v.myEl = my.el;
-      if (S.phase === "reveal") { v.correct = it.correct; v.myPoints = my ? my.points : 0; v.explain = it.explain; }
+      if (S.phase === "reveal") { v.correct = it.correct; v.explain = it.explain; }
     } else if (it.type === "interactive") {
       v.title = it.title; v.text = it.text;
       const a = S.awards[S.idx] || []; const k = a.indexOf(id); v.place = k >= 0 ? k + 1 : null;
     } else if (it.type === "pause") {
       v.title = it.title; v.remainingMs = S.pauseEnd ? Math.max(0, S.pauseEnd - Date.now()) : null;
-    } else if (it.type === "end") {
+    } else if (it.type === "end" || it.type === "standings") {
+      v.title = it.title;
       v.standings = st.map(x => ({ name: x.name, score: x.score }));
     } else {
       v.title = it.title;
@@ -153,6 +166,45 @@
   function sendState(id) { if (S.teams[id]) send(id, viewFor(id)); }
   function broadcast() { for (const id of conns.keys()) sendState(id); }
 
+  // ---------- Tablet-Fernbedienung ----------
+  function remoteView() {
+    const it = item(), ans = S.answers[S.idx] || {};
+    return {
+      t: "rstate", idx: S.idx, total: ITEMS.length, phase: S.phase, code: S.code, locked: S.locked,
+      item: { type: it.type, category: it.category, q: it.q, a: it.a, correct: it.correct, explain: it.explain, note: it.note,
+        title: it.title, text: it.text, audio: it.audio, revealAudio: it.revealAudio, img: it.img, multiplier: it.multiplier, minutes: it.minutes },
+      next: ITEMS[S.idx + 1] ? { type: ITEMS[S.idx + 1].type, title: ITEMS[S.idx + 1].title, q: ITEMS[S.idx + 1].q, note: ITEMS[S.idx + 1].note } : null,
+      ansMs: ANS_MS,
+      remainingMs: S.phase === "open" ? Math.max(0, ANS_MS - (Date.now() - S.openedAt)) : null,
+      pauseRemainingMs: S.pauseEnd ? Math.max(0, S.pauseEnd - Date.now()) : null,
+      awards: S.awards[S.idx] || [],
+      interactivePoints: Q.interactivePoints,
+      teams: standings().map(x => ({ ...x, online: conns.has(x.id), answer: ans[x.id] || null }))
+    };
+  }
+  function sendRemote(c) { if (c.open) { try { c.send(remoteView()); } catch {} } }
+  function sendRemotes() { if (remotes.size) { const v = remoteView(); for (const c of remotes) if (c.open) { try { c.send(v); } catch {} } } }
+  function toggleAward(id, k) {
+    const arr = (S.awards[S.idx] || []).slice();
+    if (arr[k] === id) arr[k] = null;
+    else { for (let j = 0; j < arr.length; j++) if (arr[j] === id) arr[j] = null; arr[k] = id; }
+    S.awards[S.idx] = arr; save(); render(); broadcast();
+  }
+  function remoteCmd(d) {
+    const it = item();
+    switch (d.c) {
+      case "prev": enterItem(S.idx - 1); break;
+      case "next": enterItem(S.idx + 1); break;
+      case "primary": primary(); break;
+      case "award": if (S.teams[d.id] && it.type === "interactive") toggleAward(d.id, +d.k); break;
+      case "adj": if (S.teams[d.id]) { S.manual[d.id] = (S.manual[d.id] || 0) + (+d.v || 0); save(); render(); broadcast(); } break;
+      case "play": if (it.audio) playAudio(d.reveal && it.revealAudio ? it.revealAudio : it.audio); break;
+      case "stop": audio.pause(); break;
+      case "lock": S.locked = !S.locked; save(); render(); break;
+      case "join": showJoin = !showJoin; showRemote = false; render(); break;
+    }
+  }
+
   // ---------- Flow ----------
   function enterItem(i) {
     audio.pause();
@@ -161,7 +213,7 @@
     S.openedAt = null; S.pauseEnd = null;
     S.phase = it.type === "mc" && S.answers[S.idx] && Object.keys(S.answers[S.idx]).length ? "reveal" : "show";
     if (it.type === "end") S.phase = "reveal";
-    showJoin = false;
+    showJoin = false; showRemote = false;
     save(); render(); broadcast();
   }
   function openQuestion() {
@@ -258,7 +310,15 @@
     const ids = S.order.filter(x => S.teams[x]);
 
     let primaryLabel = null; // großer Button unten mittig
-    if (showJoin) {
+    if (showRemote) {
+      st.innerHTML = `<div class="lobby"><div class="qr">${qrHtml(remoteUrl())}</div><div>
+        <div class="bigtitle">🎛 Tablet als Fernbedienung</div>
+        <p class="bigtext">QR-Code mit dem Moderator-Tablet scannen.</p>
+        <p class="muted">Dort siehst du Lösung, Notizen, Antworten und Punkte und steuerst das Quiz. Der Beamer zeigt nur, was alle sehen dürfen.<br>Diesen Code nicht den Teams zeigen!</p>
+        <p class="muted">Verbundene Tablets: <b>${remotes.size}</b></p></div></div>
+        <div class="controls"><button class="primary" id="bCloseRemote">Zurück zum Quiz</button></div>`;
+      $("bCloseRemote").onclick = () => { showRemote = false; render(); };
+    } else if (showJoin) {
       st.innerHTML = lobbyHtml() + `<div class="controls"><button class="primary" id="bCloseJoin">Zurück zum Quiz</button></div>`;
       $("bCloseJoin").onclick = () => { showJoin = false; render(); };
     } else if (it.type === "intro") {
@@ -286,13 +346,7 @@
         } else {
           primaryLabel = "Weiter ▶";
           if (it.explain) html += `<div class="explain">${esc(it.explain)}</div>`;
-          html += `<div class="results">${ids.map(id => {
-            const r = ans[id];
-            const p = r ? r.points : 0;
-            return `<div class="res ${p > 0 ? "pos" : p < 0 ? "neg" : ""}">${esc(teamName(id))}<b>${p > 0 ? "+" : ""}${p}</b>
-              <span class="muted small">${r ? `${LETTERS[r.choice]} · ${(r.el / 1000).toFixed(1)} s` : "keine Antwort"}</span></div>`;
-          }).join("")}</div>
-          ${it.revealAudio || it.audio ? `<div class="controls"><button id="bPlayRev">🔊 Audio</button><button id="bStop">⏹</button></div>` : ""}`;
+          html += `${it.revealAudio || it.audio ? `<div class="controls"><button id="bPlayRev">🔊 Audio</button><button id="bStop">⏹</button></div>` : ""}`;
         }
       }
       st.innerHTML = html;
@@ -301,14 +355,8 @@
       primaryLabel = "Weiter ▶";
       st.innerHTML = `${it.img ? `<div class="qimg"><img src="${esc(it.img)}" alt=""></div>` : ""}<div class="category">Interaktive Aufgabe</div><div class="bigtitle">${esc(it.title)}</div><p class="bigtext">${esc(it.text)}</p>
         <div class="award">${ids.map(id => `<span>${esc(teamName(id))}</span>
-          ${Q.interactivePoints.map((p, k) => `<button data-award="${id}" data-k="${k}" class="${a[k] === id ? "sel" : ""}">${k + 1}. Platz (+${p})</button>`).join("")}`).join("")}</div>`;
-      st.querySelectorAll("[data-award]").forEach(b => b.onclick = () => {
-        const id = b.dataset.award, k = +b.dataset.k;
-        const arr = (S.awards[S.idx] || []).slice();
-        if (arr[k] === id) arr[k] = null;
-        else { for (let j = 0; j < arr.length; j++) if (arr[j] === id) arr[j] = null; arr[k] = id; }
-        S.awards[S.idx] = arr; save(); render(); broadcast();
-      });
+          ${Q.interactivePoints.map((p, k) => `<button data-award="${id}" data-k="${k}" class="${a[k] === id ? "sel" : ""}">${k + 1}. Platz</button>`).join("")}`).join("")}</div>`;
+      st.querySelectorAll("[data-award]").forEach(b => b.onclick = () => toggleAward(b.dataset.award, +b.dataset.k));
     } else if (it.type === "pause") {
       primaryLabel = S.pauseEnd ? "Weiter ▶" : `☕ Pause starten (${it.minutes || 5} min)`;
       st.innerHTML = `<div class="bigtitle">${esc(it.title || "Pause")}</div>
@@ -316,11 +364,14 @@
         ${podium(5)}
         ${S.pauseEnd ? "" : `<div class="controls"><button id="bPauseNext">Pause überspringen</button></div>`}`;
       if ($("bPauseNext")) $("bPauseNext").onclick = () => enterItem(S.idx + 1);
+    } else if (it.type === "standings") {
+      primaryLabel = "Weiter ▶";
+      st.innerHTML = `<div class="bigtitle">${esc(it.title || "Zwischenstand")}</div>${it.text ? `<p class="bigtext">${esc(it.text)}</p>` : ""}${podium(99)}`;
     } else if (it.type === "end") {
       st.innerHTML = `<div class="bigtitle">${esc(it.title || "Siegerehrung")}</div>${podium(99)}`;
     }
     if (primaryLabel) st.insertAdjacentHTML("beforeend", `<div class="nextbar"><button class="primary big" id="bPrimary">${esc(primaryLabel)}</button></div>`);
-    const viewKey = S.idx + "|" + S.phase + "|" + showJoin;
+    const viewKey = S.idx + "|" + S.phase + "|" + showJoin + "|" + showRemote;
     if (viewKey !== render.lastKey) { st.scrollTop = 0; render.lastKey = viewKey; }
     const bp = $("bPrimary"); if (bp) bp.onclick = primary;
     const pl = $("bPlay"); if (pl) pl.onclick = () => playAudio(it.audio);
@@ -330,6 +381,11 @@
     renderScore();
     renderNotes();
     tick();
+    sendRemotes();
+  }
+  function remoteUrl() {
+    const base = location.href.replace(/[#?].*$/, "").replace(/[^/]*$/, "");
+    return base + "remote.html?room=" + S.code + "&key=" + S.remoteKey;
   }
 
   function podium(n) {
@@ -343,7 +399,7 @@
     const st = standings();
     $("scoreList").innerHTML = st.map(x => `<li>
       <span class="dot ${conns.has(x.id) ? "on" : ""}" title="${conns.has(x.id) ? "verbunden" : "nicht verbunden"}"></span>
-      <span class="n">${esc(x.name)}</span><span class="s">${x.score}</span>
+      <span class="n">${esc(x.name)}</span>
       <span class="tools"><button data-adj="${x.id}" data-v="-5">−5</button><button data-adj="${x.id}" data-v="5">+5</button>
       <button data-ren="${x.id}" title="umbenennen">✎</button><button data-del="${x.id}" title="entfernen">✕</button></span></li>`).join("")
       || '<li class="muted">Noch keine Teams</li>';
@@ -394,11 +450,13 @@
     }
   }
   setInterval(tick, 200);
+  setInterval(sendRemotes, 3000);
 
   // ---------- Buttons & Tastatur ----------
   $("bPrev").onclick = () => enterItem(S.idx - 1);
   $("bNext").onclick = () => enterItem(S.idx + 1);
-  $("bJoin").onclick = () => { showJoin = !showJoin; render(); };
+  $("bJoin").onclick = () => { showJoin = !showJoin; showRemote = false; render(); };
+  $("bRemote").onclick = () => { showRemote = !showRemote; showJoin = false; render(); };
   $("bLock").onclick = () => { S.locked = !S.locked; save(); render(); };
   $("bAdmin").onclick = () => { admin = !admin; render(); };
   $("bResetItem").onclick = () => {

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#0f1424">
+<title>Team-Quiz · Fernbedienung</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .remote { max-width: 900px; margin: 0 auto; padding: 1rem 1rem 7.5rem; display: flex; flex-direction: column; gap: .9rem; }
+  .remote header { display: flex; gap: .6rem; align-items: center; }
+  .remote header .pos { font-weight: 700; margin-right: auto; }
+  .ra { display: flex; gap: .6rem; align-items: center; padding: .6rem .8rem; border-radius: 10px; background: var(--panel2); margin-top: .4rem; }
+  .ra.ok { background: #1d4d33; outline: 2px solid var(--ok); }
+  .sol { color: var(--ok); font-weight: 700; }
+  .note { background: #2b2410; border: 1px solid #6b5a1e; padding: .7rem .9rem; border-radius: 10px; line-height: 1.45; }
+  .tlist { display: flex; flex-direction: column; gap: .4rem; }
+  .trow { display: flex; align-items: center; gap: .5rem; background: var(--panel2); padding: .5rem .7rem; border-radius: 10px; }
+  .trow .n { flex: 1; font-weight: 600; }
+  .trow .s { font-weight: 800; min-width: 3ch; text-align: right; }
+  .trow button { padding: .35em .7em; }
+  .trow button.sel { background: var(--ok); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--bad); flex: none; }
+  .dot.on { background: var(--ok); }
+  .bottom { position: fixed; left: 0; right: 0; bottom: 0; background: var(--panel); padding: .8rem 1rem calc(.8rem + env(safe-area-inset-bottom)); display: flex; gap: .7rem; justify-content: center; box-shadow: 0 -6px 20px #0008; }
+  .bottom button { font-size: 1.3rem; padding: .8em 1.1em; }
+  .bottom #rPrimary { flex: 1; max-width: 520px; font-size: 1.5rem; font-weight: 700; }
+  h2 { margin: 0 0 .5rem; font-size: 1.05rem; color: var(--warn); }
+  .rq { font-size: 1.25rem; font-weight: 700; line-height: 1.3; }
+  .timerbig { font-size: 2.4rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<div class="remote">
+  <header><span class="pos" id="pos">Fernbedienung</span><span class="conn off" id="conn">offline</span></header>
+  <div id="view"><div class="card center">Verbinde …</div></div>
+</div>
+<div class="bottom">
+  <button id="rPrev">◀</button>
+  <button id="rPrimary" class="primary">…</button>
+  <button id="rNext">▶</button>
+</div>
+<script src="vendor/peerjs.min.js"></script>
+<script src="common.js"></script>
+<script src="remote.js"></script>
+</body>
+</html>

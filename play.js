@@ -137,7 +137,8 @@
   function render() {
     if (!st) return;
     $("team").textContent = st.name;
-    $("sc").textContent = st.score + " P" + (st.rank ? ` · ${st.rank}.` : "");
+    $("sc").textContent = st.score != null ? `${st.score} P · ${st.rank}.` : "";
+    $("sc").style.display = st.score != null ? "" : "none";
     const v = $("view");
     if (st.type === "mc") {
       const chosen = st.myChoice !== null ? st.myChoice : pending[st.idx];
@@ -158,10 +159,9 @@
         const ok = st.myChoice === st.correct, none = st.myChoice === null;
         v.innerHTML = `<div class="card center">
           <div class="huge" style="color:${none ? "var(--muted)" : ok ? "var(--ok)" : "var(--bad)"}">${none ? "–" : ok ? "Richtig!" : "Falsch"}</div>
-          <div class="huge">${st.myPoints > 0 ? "+" : ""}${st.myPoints}</div>
           <p>Lösung: <b>${LETTERS[st.correct]} – ${esc(st.a[st.correct])}</b></p>
           ${st.explain ? `<p class="muted">${esc(st.explain)}</p>` : ""}
-          <p>Gesamt: <b>${st.score}</b> Punkte · Platz <b>${st.rank}</b> von ${st.teams}</p></div>`;
+          </div>`;
       }
     } else if (st.type === "interactive") {
       v.innerHTML = `<div class="card"><h1>${esc(st.title)}</h1><p>${esc(st.text)}</p>
@@ -170,6 +170,9 @@
       v.innerHTML = `<div class="card center"><h1>☕ Pause</h1><div class="huge" id="pt"></div><p>Ihr seid auf Platz <b>${st.rank}</b> mit <b>${st.score}</b> Punkten.</p></div>`;
       if (st.remainingMs != null) starts.pause = performance.now() + st.remainingMs;
       tick();
+    } else if (st.type === "standings") {
+      v.innerHTML = `<div class="card center"><h1>📊 Zwischenstand</h1><div class="huge">Platz ${st.rank}</div><p>${st.score} Punkte</p></div>
+        <div class="card"><ol>${(st.standings || []).map(x => `<li>${esc(x.name)} – <b>${x.score}</b></li>`).join("")}</ol></div>`;
     } else if (st.type === "end") {
       v.innerHTML = `<div class="card center"><h1>🏆 Endstand</h1><div class="huge">Platz ${st.rank}</div><p>${st.score} Punkte</p></div>
         <div class="card"><ol>${(st.standings || []).map(x => `<li>${esc(x.name)} – <b>${x.score}</b></li>`).join("")}</ol></div>`;
