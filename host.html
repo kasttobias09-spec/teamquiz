@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Team-Quiz · Moderation</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="host">
+  <div class="topbar">
+    <span class="title" id="title">Team-Quiz</span>
+    <span class="muted small" id="net">verbinde…</span>
+    <span class="code" id="code" title="Raumcode"></span>
+    <span class="muted small" id="pos"></span>
+    <button id="bPrev" title="Zurück (←)">◀</button>
+    <button id="bNext" title="Weiter (→)">▶</button>
+    <button id="bJoin" title="QR-Code / Beitritt anzeigen">📱 Beitritt</button>
+    <button id="bLock" title="Neue Teams sperren/erlauben"></button>
+    <button id="bAudioLoad" title="Lokale Audiodateien laden">🎵 Audio laden</button>
+    <button id="bMod" title="Moderator-Fenster (Notizen, Lösungen) öffnen">📝 Moderator</button>
+    <button id="bAdmin" title="Teams bearbeiten / Punkte korrigieren">⚙︎</button>
+    <input type="file" id="audioFiles" accept="audio/*" multiple class="hidden">
+  </div>
+  <div class="main">
+    <div class="stage" id="stage"></div>
+    <div class="side" id="side">
+      <div class="score"><h3>Punktestand</h3><ol id="scoreList"></ol></div>
+      <div id="adminBox" class="hidden">
+        <div class="controls">
+          <button id="bResetItem">Aktuelle Frage zurücksetzen</button>
+          <button id="bResetScores">Alle Punkte zurücksetzen</button>
+          <button id="bResetAll" class="bad">Komplett neu (neuer Code)</button>
+        </div>
+        <p class="muted small">Tastatur: → weiter, ← zurück, Leertaste = Start/Auflösen, N = Notizen, Q = Beitritt.</p>
+      </div>
+      <div id="notes" class="notes hidden"></div>
+    </div>
+  </div>
+</div>
+<script src="vendor/peerjs.min.js"></script>
+<script src="vendor/qrcode.js"></script>
+<script src="common.js"></script>
+<script src="questions.js"></script>
+<script src="host.js"></script>
+</body>
+</html>

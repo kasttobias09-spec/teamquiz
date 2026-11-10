@@ -1,0 +1,438 @@
+(() => {
+  const Q = window.QUIZ;
+  const { esc, LETTERS } = TQ;
+  const ITEMS = Q.items;
+  const ANS_MS = Q.answerSeconds * 1000;
+  const MAX_TEAMS = Q.maxTeams || 5;
+  const STORE = "tq-host-v1";
+  const $ = id => document.getElementById(id);
+
+  // ---------- State ----------
+  const genCode = () => Array.from({ length: 4 }, () => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[Math.floor(Math.random() * 32)]).join("");
+  const newState = () => ({ code: genCode(), teams: {}, order: [], locked: false, idx: 0, phase: "show", openedAt: null, pauseEnd: null, answers: {}, awards: {}, manual: {} });
+  let S;
+  try { S = JSON.parse(localStorage.getItem(STORE)) || newState(); } catch { S = newState(); }
+  if (S.idx >= ITEMS.length) S.idx = 0;
+  const save = () => localStorage.setItem(STORE, JSON.stringify(S));
+
+  const conns = new Map(); // teamId -> DataConnection
+  let showJoin = false, showNotes = false, admin = false;
+
+  const item = () => ITEMS[S.idx];
+  const mult = it => it.multiplier || 1;
+
+  function pointsFor(it, choice, elapsedMs) {
+    if (choice === it.correct) return mult(it) * Math.max(0, Q.maxPoints - Math.floor(elapsedMs / 1000));
+    return mult(it) * Q.wrongPoints;
+  }
+
+  // Punkte; während eine Frage läuft, zählen deren Antworten noch nicht (sonst verrät der Punktestand die Lösung)
+  function score(id) {
+    let s = S.manual[id] || 0;
+    for (const qi in S.answers) {
+      if (+qi === S.idx && S.phase !== "reveal") continue;
+      const r = S.answers[qi][id];
+      if (r) s += r.points;
+    }
+    for (const ii in S.awards) {
+      const a = S.awards[ii] || [];
+      Q.interactivePoints.forEach((p, k) => { if (a[k] === id) s += p; });
+    }
+    return s;
+  }
+  function standings() {
+    return S.order.filter(id => S.teams[id]).map(id => ({ id, name: S.teams[id].name, score: score(id) }))
+      .sort((a, b) => b.score - a.score);
+  }
+  function rankOf(id, st = standings()) {
+    const me = st.find(x => x.id === id);
+    return me ? st.filter(x => x.score > me.score).length + 1 : null;
+  }
+
+  // ---------- Networking (PeerJS) ----------
+  let peer;
+  function setNet(t, ok) { $("net").textContent = t; $("net").style.color = ok ? "var(--ok)" : "var(--warn)"; }
+  function startPeer() {
+    setNet("verbinde…");
+    peer = new Peer(TQ.PEER_PREFIX + S.code, TQ.peerOptions);
+    peer.on("open", () => setNet("● online", true));
+    peer.on("connection", conn => {
+      conn.on("data", d => onData(conn, d));
+      conn.on("close", () => {
+        if (conn.teamId && conns.get(conn.teamId) === conn) { conns.delete(conn.teamId); render(); }
+      });
+    });
+    peer.on("disconnected", () => {
+      setNet("Verbindung zum Vermittlungsserver weg – neuer Versuch…");
+      setTimeout(() => { if (!peer.destroyed && peer.disconnected) peer.reconnect(); }, 1500);
+    });
+    peer.on("error", e => {
+      if (e.type === "unavailable-id") {
+        setNet("Raumcode noch belegt (anderer Tab offen?) – neuer Versuch in 3 s…");
+        peer.destroy(); setTimeout(startPeer, 3000);
+      } else if (e.type === "peer-unavailable") {
+        /* ignorieren */
+      } else {
+        setNet("Netzwerkfehler: " + e.type + " – neuer Versuch…");
+        setTimeout(() => {
+          if (peer.destroyed) startPeer(); else if (peer.disconnected) peer.reconnect();
+        }, 2500);
+      }
+    });
+  }
+
+  function send(id, msg) { const c = conns.get(id); if (c && c.open) { try { c.send(msg); } catch {} } }
+
+  function onData(conn, d) {
+    if (!d || typeof d !== "object") return;
+    if (d.t === "join") {
+      let id = d.teamId && S.teams[d.teamId] ? d.teamId : null;
+      if (!id) {
+        if (S.locked) return conn.send({ t: "reject", reason: "Neue Teams sind gesperrt. Bitte beim Moderator melden." });
+        if (S.order.filter(x => S.teams[x]).length >= MAX_TEAMS) return conn.send({ t: "reject", reason: `Es sind bereits ${MAX_TEAMS} Teams angemeldet.` });
+        let name = String(d.name || "").trim().slice(0, 24) || "Team " + (S.order.length + 1);
+        const names = new Set(Object.values(S.teams).map(t => t.name.toLowerCase()));
+        let base = name, n = 2; while (names.has(name.toLowerCase())) name = `${base} ${n++}`;
+        id = "t" + Math.random().toString(36).slice(2, 10);
+        S.teams[id] = { name }; S.order.push(id); save();
+      }
+      const old = conns.get(id);
+      if (old && old !== conn) { try { old.close(); } catch {} }
+      conn.teamId = id; conns.set(id, conn);
+      conn.send({ t: "welcome", teamId: id, name: S.teams[id].name, room: S.code });
+      sendState(id); render();
+      return;
+    }
+    const id = conn.teamId;
+    if (!id || !S.teams[id]) return;
+    if (d.t === "answer") {
+      const it = item();
+      if (it.type !== "mc" || S.phase !== "open" || d.idx !== S.idx) return;
+      S.answers[S.idx] = S.answers[S.idx] || {};
+      if (S.answers[S.idx][id]) return sendState(id);
+      const hostEl = Date.now() - S.openedAt;
+      if (hostEl > ANS_MS + 1500) return sendState(id);
+      const choice = +d.choice;
+      if (!(choice >= 0 && choice <= 3)) return;
+      // Zeit wird auf dem Handy gemessen (fair bei Netzverzögerung), aber auf plausible Werte begrenzt
+      let el = Number(d.elapsedMs);
+      if (!isFinite(el)) el = hostEl;
+      el = Math.max(0, Math.min(hostEl, Math.max(el, hostEl - 2000), ANS_MS - 1));
+      S.answers[S.idx][id] = { choice, el, points: pointsFor(it, choice, el) };
+      save();
+      sendState(id);
+      const all = S.order.filter(x => S.teams[x]);
+      if (all.every(x => S.answers[S.idx][x])) closeQuestion(); else render();
+    }
+  }
+
+  function viewFor(id) {
+    const it = item(), st = standings();
+    const v = { t: "state", idx: S.idx, type: it.type, phase: S.phase, name: S.teams[id].name, score: score(id), rank: rankOf(id, st), teams: st.length };
+    if (it.type === "mc") {
+      v.category = it.category; v.mult = mult(it);
+      if (S.phase !== "show") { v.q = it.q; v.a = it.a; }
+      v.ansMs = ANS_MS; v.maxPoints = Q.maxPoints;
+      if (S.phase === "open") v.remainingMs = Math.max(0, ANS_MS - (Date.now() - S.openedAt));
+      const my = (S.answers[S.idx] || {})[id];
+      v.myChoice = my ? my.choice : null;
+      if (my) v.myEl = my.el;
+      if (S.phase === "reveal") { v.correct = it.correct; v.myPoints = my ? my.points : 0; v.explain = it.explain; }
+    } else if (it.type === "interactive") {
+      v.title = it.title; v.text = it.text;
+      const a = S.awards[S.idx] || []; const k = a.indexOf(id); v.place = k >= 0 ? k + 1 : null;
+    } else if (it.type === "pause") {
+      v.title = it.title; v.remainingMs = S.pauseEnd ? Math.max(0, S.pauseEnd - Date.now()) : null;
+    } else if (it.type === "end") {
+      v.standings = st.map(x => ({ name: x.name, score: x.score }));
+    } else {
+      v.title = it.title;
+    }
+    return v;
+  }
+  function sendState(id) { if (S.teams[id]) send(id, viewFor(id)); }
+  function broadcast() { for (const id of conns.keys()) sendState(id); }
+
+  // ---------- Flow ----------
+  function enterItem(i) {
+    audio.pause();
+    S.idx = Math.max(0, Math.min(ITEMS.length - 1, i));
+    const it = item();
+    S.openedAt = null; S.pauseEnd = null;
+    S.phase = it.type === "mc" && S.answers[S.idx] && Object.keys(S.answers[S.idx]).length ? "reveal" : "show";
+    if (it.type === "end") S.phase = "reveal";
+    showJoin = false;
+    save(); render(); broadcast();
+  }
+  function openQuestion() {
+    const it = item();
+    if (it.type !== "mc" || S.phase !== "show") return;
+    S.answers[S.idx] = {};
+    S.phase = "open"; S.openedAt = Date.now();
+    if (it.audio) playAudio(it.audio);
+    save(); render(); broadcast();
+  }
+  function closeQuestion() {
+    if (S.phase !== "open") return;
+    S.phase = "closed"; save(); render(); broadcast();
+  }
+  function reveal() {
+    if (S.phase !== "closed" && S.phase !== "open") return;
+    S.phase = "reveal";
+    const it = item();
+    if (it.revealAudio) playAudio(it.revealAudio); else audio.pause();
+    save(); render(); broadcast();
+  }
+  function primary() {
+    const it = item();
+    if (it.type === "mc") {
+      if (S.phase === "show") openQuestion();
+      else if (S.phase === "open" || S.phase === "closed") reveal();
+      else enterItem(S.idx + 1);
+    } else if (it.type === "pause" && !S.pauseEnd) {
+      S.pauseEnd = Date.now() + (it.minutes || 5) * 60000; save(); render(); broadcast();
+    } else enterItem(S.idx + 1);
+  }
+
+  // ---------- Audio ----------
+  const audio = new Audio();
+  const localFiles = {};
+  audio.addEventListener("error", () => {
+    if (!audio.src) return;
+    toast("Audiodatei nicht gefunden: " + decodeURIComponent(audio.src.split("/").pop()) + " – in den Ordner audio/ legen oder über 🎵 laden.");
+  });
+  function playAudio(name) {
+    audio.src = localFiles[name] || "audio/" + encodeURIComponent(name);
+    audio.currentTime = 0;
+    audio.play().catch(() => {});
+  }
+  $("bAudioLoad").onclick = () => $("audioFiles").click();
+  $("audioFiles").onchange = e => {
+    for (const f of e.target.files) localFiles[f.name] = URL.createObjectURL(f);
+    toast(e.target.files.length + " Audiodatei(en) geladen: " + Object.keys(localFiles).join(", "));
+    render();
+  };
+
+  // ---------- Rendering ----------
+  function toast(msg) {
+    const d = document.createElement("div");
+    d.textContent = msg;
+    Object.assign(d.style, { position: "fixed", bottom: "20px", left: "50%", transform: "translateX(-50%)", background: "#000c", padding: "12px 18px", borderRadius: "10px", zIndex: 99, maxWidth: "80vw" });
+    document.body.appendChild(d); setTimeout(() => d.remove(), 5000);
+  }
+
+  function joinUrl() {
+    const base = location.href.replace(/[#?].*$/, "").replace(/[^/]*$/, "");
+    return base + "play.html?room=" + S.code;
+  }
+  function qrHtml(text) {
+    const qr = qrcode(0, "M"); qr.addData(text); qr.make();
+    return qr.createSvgTag({ cellSize: 8, margin: 0, scalable: true });
+  }
+
+  function lobbyHtml() {
+    const ids = S.order.filter(x => S.teams[x]);
+    return `<div class="lobby">
+      <div class="qr">${qrHtml(joinUrl())}</div>
+      <div>
+        <div class="bigtitle">Mitspielen!</div>
+        <p class="bigtext">1 Handy pro Team · QR-Code scannen<br>Raumcode: <b style="letter-spacing:.15em">${esc(S.code)}</b></p>
+        <p class="joinurl muted">${esc(joinUrl())}</p>
+        <div class="status">${ids.map(id => `<span class="chip ${conns.has(id) ? "done" : "off"}">${esc(S.teams[id].name)}</span>`).join("") || '<span class="muted">Noch keine Teams …</span>'}</div>
+        <p class="muted">${ids.length}/${MAX_TEAMS} Teams</p>
+      </div></div>`;
+  }
+
+  function teamName(id) { return S.teams[id] ? S.teams[id].name : "?"; }
+
+  function render() {
+    const it = item();
+    document.title = Q.title + " · Moderation";
+    $("title").textContent = Q.title;
+    $("code").textContent = S.code;
+    $("pos").textContent = `${S.idx + 1}/${ITEMS.length}`;
+    $("bLock").textContent = S.locked ? "🔒 gesperrt" : "🔓 offen";
+    $("bPrev").disabled = S.idx === 0;
+    $("bNext").disabled = S.idx === ITEMS.length - 1;
+    const st = $("stage");
+    const ids = S.order.filter(x => S.teams[x]);
+
+    if (showJoin) {
+      st.innerHTML = lobbyHtml() + `<div class="controls"><button class="primary" id="bCloseJoin">Zurück zum Quiz</button></div>`;
+      $("bCloseJoin").onclick = () => { showJoin = false; render(); };
+    } else if (it.type === "intro") {
+      st.innerHTML = `<div class="bigtitle">${esc(it.title)}</div><p class="bigtext">${esc(it.text || "")}</p>` + lobbyHtml() +
+        `<div class="controls"><button class="primary" id="bPrimary">Los geht's ▶</button></div>`;
+    } else if (it.type === "mc") {
+      const ans = S.answers[S.idx] || {};
+      const rev = S.phase === "reveal";
+      const who = k => rev ? ids.filter(id => ans[id] && ans[id].choice === k).map(id => `<span>${esc(teamName(id))}</span>`).join("") : "";
+      let html = `<div class="category">${esc(it.category || "")}${it.multiplier ? ` · ×${it.multiplier}` : ""}</div>
+        <div class="question">${esc(it.q)}</div>`;
+      if (S.phase === "show") {
+        html += `<div class="controls"><button class="primary" id="bPrimary" style="font-size:1.4rem">▶ Start (${Q.answerSeconds} s)${it.audio ? " + Audio" : ""}</button>
+          ${it.audio ? `<button id="bPlay">🔊 Audio testen</button><button id="bStop">⏹</button><span class="muted small">${esc(it.audio)}${localFiles[it.audio] ? " ✓ geladen" : ""}</span>` : ""}</div>
+          <p class="muted">Antworten werden nach dem Start eingeblendet.</p>`;
+      } else {
+        html += `<div class="answers">${it.a.map((t, k) =>
+          `<div class="answer c${LETTERS[k]} ${rev ? (k === it.correct ? "correct" : "dim") : ""}"><span class="letter">${LETTERS[k]}</span><span>${esc(t)}</span><span class="who">${who(k)}</span></div>`).join("")}</div>`;
+        if (S.phase === "open" || S.phase === "closed") {
+          html += `<div class="timer"><span class="big" id="tbig"></span><div class="bar"><div id="tbar"></div></div><span class="pts" id="tpts"></span></div>
+            <div class="status">${ids.map(id => `<span class="chip ${ans[id] ? "done" : ""} ${conns.has(id) ? "" : "off"}">${ans[id] ? "✓ " : ""}${esc(teamName(id))}</span>`).join("")}</div>
+            <div class="controls"><button class="primary" id="bPrimary">Auflösen</button>
+            ${it.audio ? `<button id="bPlay">🔊 nochmal</button><button id="bStop">⏹</button>` : ""}</div>`;
+        } else {
+          if (it.explain) html += `<div class="explain">${esc(it.explain)}</div>`;
+          html += `<div class="results">${ids.map(id => {
+            const r = ans[id];
+            const p = r ? r.points : 0;
+            return `<div class="res ${p > 0 ? "pos" : p < 0 ? "neg" : ""}">${esc(teamName(id))}<b>${p > 0 ? "+" : ""}${p}</b>
+              <span class="muted small">${r ? `${LETTERS[r.choice]} · ${(r.el / 1000).toFixed(1)} s` : "keine Antwort"}</span></div>`;
+          }).join("")}</div>
+          <div class="controls"><button class="primary" id="bPrimary">Weiter ▶</button>
+          ${it.revealAudio || it.audio ? `<button id="bPlayRev">🔊 Audio</button><button id="bStop">⏹</button>` : ""}</div>`;
+        }
+      }
+      st.innerHTML = html;
+    } else if (it.type === "interactive") {
+      const a = S.awards[S.idx] || [];
+      st.innerHTML = `<div class="category">Interaktive Aufgabe</div><div class="bigtitle">${esc(it.title)}</div><p class="bigtext">${esc(it.text)}</p>
+        <div class="award">${ids.map(id => `<span>${esc(teamName(id))}</span>
+          ${Q.interactivePoints.map((p, k) => `<button data-award="${id}" data-k="${k}" class="${a[k] === id ? "sel" : ""}">${k + 1}. Platz (+${p})</button>`).join("")}`).join("")}</div>
+        <div class="controls"><button class="primary" id="bPrimary">Weiter ▶</button></div>`;
+      st.querySelectorAll("[data-award]").forEach(b => b.onclick = () => {
+        const id = b.dataset.award, k = +b.dataset.k;
+        const arr = (S.awards[S.idx] || []).slice();
+        if (arr[k] === id) arr[k] = null;
+        else { for (let j = 0; j < arr.length; j++) if (arr[j] === id) arr[j] = null; arr[k] = id; }
+        S.awards[S.idx] = arr; save(); render(); broadcast();
+      });
+    } else if (it.type === "pause") {
+      st.innerHTML = `<div class="bigtitle">${esc(it.title || "Pause")}</div>
+        <div class="timer"><span class="big" id="pbig">${String(it.minutes || 5).padStart(2, "0")}:00</span></div>
+        ${podium(5)}
+        <div class="controls">${S.pauseEnd ? "" : `<button class="primary" id="bPrimary">Pause starten (${it.minutes || 5} min)</button>`}
+        <button id="bPauseNext">Weiter ▶</button></div>`;
+      $("bPauseNext").onclick = () => enterItem(S.idx + 1);
+    } else if (it.type === "end") {
+      st.innerHTML = `<div class="bigtitle">${esc(it.title || "Siegerehrung")}</div>${podium(99)}`;
+    }
+    const bp = $("bPrimary"); if (bp) bp.onclick = primary;
+    const pl = $("bPlay"); if (pl) pl.onclick = () => playAudio(it.audio);
+    const pr = $("bPlayRev"); if (pr) pr.onclick = () => playAudio(it.revealAudio || it.audio);
+    const sp = $("bStop"); if (sp) sp.onclick = () => audio.pause();
+
+    renderScore();
+    renderNotes();
+    tick();
+    try { modChannel.postMessage({ idx: S.idx, phase: S.phase }); } catch {}
+  }
+
+  function podium(n) {
+    const st = standings().slice(0, n);
+    if (!st.length) return "";
+    const medals = ["🥇", "🥈", "🥉"];
+    return `<div class="podium"><ol>${st.map((x, i) => `<li><span>${medals[i] || i + 1 + "."}</span><span>${esc(x.name)}</span><span class="s">${x.score}</span></li>`).join("")}</ol></div>`;
+  }
+
+  function renderScore() {
+    const st = standings();
+    $("scoreList").innerHTML = st.map(x => `<li>
+      <span class="dot ${conns.has(x.id) ? "on" : ""}" title="${conns.has(x.id) ? "verbunden" : "nicht verbunden"}"></span>
+      <span class="n">${esc(x.name)}</span><span class="s">${x.score}</span>
+      <span class="tools"><button data-adj="${x.id}" data-v="-5">−5</button><button data-adj="${x.id}" data-v="5">+5</button>
+      <button data-ren="${x.id}" title="umbenennen">✎</button><button data-del="${x.id}" title="entfernen">✕</button></span></li>`).join("")
+      || '<li class="muted">Noch keine Teams</li>';
+    $("side").classList.toggle("admin", admin);
+    $("adminBox").classList.toggle("hidden", !admin);
+    $("scoreList").querySelectorAll("[data-adj]").forEach(b => b.onclick = () => {
+      const id = b.dataset.adj; S.manual[id] = (S.manual[id] || 0) + +b.dataset.v; save(); render(); broadcast();
+    });
+    $("scoreList").querySelectorAll("[data-ren]").forEach(b => b.onclick = () => {
+      const id = b.dataset.ren; const n = prompt("Neuer Teamname:", S.teams[id].name);
+      if (n && n.trim()) { S.teams[id].name = n.trim().slice(0, 24); save(); render(); broadcast(); }
+    });
+    $("scoreList").querySelectorAll("[data-del]").forEach(b => b.onclick = () => {
+      const id = b.dataset.del;
+      if (!confirm(`Team „${S.teams[id].name}“ wirklich entfernen?`)) return;
+      send(id, { t: "reject", reason: "Euer Team wurde vom Moderator entfernt." });
+      delete S.teams[id]; S.order = S.order.filter(x => x !== id);
+      const c = conns.get(id); conns.delete(id); if (c) setTimeout(() => c.close(), 300);
+      save(); render(); broadcast();
+    });
+  }
+
+  function renderNotes() {
+    const it = item();
+    $("notes").classList.toggle("hidden", !showNotes);
+    if (!showNotes) return;
+    let h = `<b>Notiz:</b> ${esc(it.note || "–")}`;
+    if (it.type === "mc") h += `<br><b>Lösung:</b> ${LETTERS[it.correct]} – ${esc(it.a[it.correct])}`;
+    $("notes").innerHTML = h;
+  }
+
+  function fmt(ms) { const s = Math.ceil(ms / 1000); return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`; }
+
+  function tick() {
+    const it = item();
+    if (it.type === "mc" && (S.phase === "open" || S.phase === "closed") && $("tbig")) {
+      const el = S.phase === "open" ? Date.now() - S.openedAt : ANS_MS;
+      const rem = Math.max(0, ANS_MS - el);
+      $("tbig").textContent = Math.ceil(rem / 1000);
+      $("tbar").style.width = (rem / ANS_MS * 100) + "%";
+      $("tbar").style.background = rem < 10000 ? "var(--bad)" : "var(--accent)";
+      $("tpts").textContent = S.phase === "open" ? `richtig jetzt: ${mult(it) * Math.max(0, Q.maxPoints - Math.floor(el / 1000))} Punkte` : "Zeit abgelaufen";
+      if (S.phase === "open" && el >= ANS_MS) closeQuestion();
+    }
+    if (it.type === "pause" && S.pauseEnd && $("pbig")) {
+      const rem = Math.max(0, S.pauseEnd - Date.now());
+      $("pbig").textContent = fmt(rem);
+    }
+  }
+  setInterval(tick, 200);
+
+  // ---------- Moderator-Fenster ----------
+  const modChannel = "BroadcastChannel" in window ? new BroadcastChannel("tq-mod") : { postMessage() {} };
+  if (modChannel.addEventListener) modChannel.addEventListener("message", e => {
+    if (e.data === "hello") modChannel.postMessage({ idx: S.idx, phase: S.phase });
+    else if (e.data && e.data.cmd === "next") enterItem(S.idx + 1);
+    else if (e.data && e.data.cmd === "prev") enterItem(S.idx - 1);
+    else if (e.data && e.data.cmd === "primary") primary();
+  });
+
+  // ---------- Buttons & Tastatur ----------
+  $("bPrev").onclick = () => enterItem(S.idx - 1);
+  $("bNext").onclick = () => enterItem(S.idx + 1);
+  $("bJoin").onclick = () => { showJoin = !showJoin; render(); };
+  $("bLock").onclick = () => { S.locked = !S.locked; save(); render(); };
+  $("bAdmin").onclick = () => { admin = !admin; render(); };
+  $("bMod").onclick = () => window.open("moderator.html", "tq-moderator", "width=520,height=720");
+  $("bResetItem").onclick = () => {
+    if (!confirm("Antworten/Punkte der aktuellen Frage löschen und Frage neu starten?")) return;
+    delete S.answers[S.idx]; delete S.awards[S.idx]; S.phase = "show"; S.openedAt = null; S.pauseEnd = null; audio.pause();
+    save(); render(); broadcast();
+  };
+  $("bResetScores").onclick = () => {
+    if (!confirm("Alle Punkte löschen? Teams bleiben verbunden.")) return;
+    S.answers = {}; S.awards = {}; S.manual = {}; enterItem(0);
+  };
+  $("bResetAll").onclick = () => {
+    if (!confirm("Komplett neu starten? Alle Teams müssen sich mit neuem Code neu anmelden.")) return;
+    localStorage.removeItem(STORE); location.reload();
+  };
+  document.addEventListener("keydown", e => {
+    if (e.target.tagName === "INPUT" || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === "ArrowRight") enterItem(S.idx + 1);
+    else if (e.key === "ArrowLeft") enterItem(S.idx - 1);
+    else if (e.key === " ") { e.preventDefault(); primary(); }
+    else if (e.key === "n" || e.key === "N") { showNotes = !showNotes; renderNotes(); }
+    else if (e.key === "q" || e.key === "Q") { showJoin = !showJoin; render(); }
+    else return;
+  });
+
+  // Nach einem Neuladen mitten in einer Frage: offene Frage gilt als beendet
+  if (S.phase === "open" && Date.now() - S.openedAt > ANS_MS) S.phase = "closed";
+  save();
+  render();
+  startPeer();
+})();
