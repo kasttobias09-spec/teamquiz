@@ -257,31 +257,34 @@
     const st = $("stage");
     const ids = S.order.filter(x => S.teams[x]);
 
+    let primaryLabel = null; // großer Button unten mittig
     if (showJoin) {
       st.innerHTML = lobbyHtml() + `<div class="controls"><button class="primary" id="bCloseJoin">Zurück zum Quiz</button></div>`;
       $("bCloseJoin").onclick = () => { showJoin = false; render(); };
     } else if (it.type === "intro") {
-      st.innerHTML = `<div class="bigtitle">${esc(it.title)}</div><p class="bigtext">${esc(it.text || "")}</p>` + lobbyHtml() +
-        `<div class="controls"><button class="primary" id="bPrimary">Los geht's ▶</button></div>`;
+      st.innerHTML = `<div class="bigtitle">${esc(it.title)}</div><p class="bigtext">${esc(it.text || "")}</p>` + lobbyHtml();
+      primaryLabel = "Los geht's ▶";
     } else if (it.type === "mc") {
       const ans = S.answers[S.idx] || {};
       const rev = S.phase === "reveal";
       const who = k => rev ? ids.filter(id => ans[id] && ans[id].choice === k).map(id => `<span>${esc(teamName(id))}</span>`).join("") : "";
-      let html = `<div class="category">${esc(it.category || "")}${it.multiplier ? ` · ×${it.multiplier}` : ""}</div>
+      let html = it.img ? `<div class="qimg ${S.phase === "show" ? "" : "small"}"><img src="${esc(it.img)}" alt=""></div>` : "";
+      html += `<div class="category">${esc(it.category || "")}${it.multiplier ? ` · ×${it.multiplier}` : ""}</div>
         <div class="question">${esc(it.q)}</div>`;
       if (S.phase === "show") {
-        html += `<div class="controls"><button class="primary" id="bPrimary" style="font-size:1.4rem">▶ Start (${Q.answerSeconds} s)${it.audio ? " + Audio" : ""}</button>
-          ${it.audio ? `<button id="bPlay">🔊 Audio testen</button><button id="bStop">⏹</button><span class="muted small">${esc(it.audio)}${localFiles[it.audio] ? " ✓ geladen" : ""}</span>` : ""}</div>
-          <p class="muted">Antworten werden nach dem Start eingeblendet.</p>`;
+        primaryLabel = `▶ Start (${Q.answerSeconds} s)${it.audio ? " + Audio" : ""}`;
+        html += it.audio ? `<div class="controls"><button id="bPlay">🔊 Audio testen</button><button id="bStop">⏹</button><span class="muted small">${esc(it.audio)}${localFiles[it.audio] ? " ✓ geladen" : ""}</span></div>` : "";
+        html += `<p class="muted">Antworten werden nach dem Start eingeblendet.</p>`;
       } else {
         html += `<div class="answers">${it.a.map((t, k) =>
           `<div class="answer c${LETTERS[k]} ${rev ? (k === it.correct ? "correct" : "dim") : ""}"><span class="letter">${LETTERS[k]}</span><span>${esc(t)}</span><span class="who">${who(k)}</span></div>`).join("")}</div>`;
         if (S.phase === "open" || S.phase === "closed") {
+          primaryLabel = "Auflösen";
           html += `<div class="timer"><span class="big" id="tbig"></span><div class="bar"><div id="tbar"></div></div><span class="pts" id="tpts"></span></div>
             <div class="status">${ids.map(id => `<span class="chip ${ans[id] ? "done" : ""} ${conns.has(id) ? "" : "off"}">${ans[id] ? "✓ " : ""}${esc(teamName(id))}</span>`).join("")}</div>
-            <div class="controls"><button class="primary" id="bPrimary">Auflösen</button>
-            ${it.audio ? `<button id="bPlay">🔊 nochmal</button><button id="bStop">⏹</button>` : ""}</div>`;
+            ${it.audio ? `<div class="controls"><button id="bPlay">🔊 nochmal</button><button id="bStop">⏹</button></div>` : ""}`;
         } else {
+          primaryLabel = "Weiter ▶";
           if (it.explain) html += `<div class="explain">${esc(it.explain)}</div>`;
           html += `<div class="results">${ids.map(id => {
             const r = ans[id];
@@ -289,17 +292,16 @@
             return `<div class="res ${p > 0 ? "pos" : p < 0 ? "neg" : ""}">${esc(teamName(id))}<b>${p > 0 ? "+" : ""}${p}</b>
               <span class="muted small">${r ? `${LETTERS[r.choice]} · ${(r.el / 1000).toFixed(1)} s` : "keine Antwort"}</span></div>`;
           }).join("")}</div>
-          <div class="controls"><button class="primary" id="bPrimary">Weiter ▶</button>
-          ${it.revealAudio || it.audio ? `<button id="bPlayRev">🔊 Audio</button><button id="bStop">⏹</button>` : ""}</div>`;
+          ${it.revealAudio || it.audio ? `<div class="controls"><button id="bPlayRev">🔊 Audio</button><button id="bStop">⏹</button></div>` : ""}`;
         }
       }
       st.innerHTML = html;
     } else if (it.type === "interactive") {
       const a = S.awards[S.idx] || [];
-      st.innerHTML = `<div class="category">Interaktive Aufgabe</div><div class="bigtitle">${esc(it.title)}</div><p class="bigtext">${esc(it.text)}</p>
+      primaryLabel = "Weiter ▶";
+      st.innerHTML = `${it.img ? `<div class="qimg"><img src="${esc(it.img)}" alt=""></div>` : ""}<div class="category">Interaktive Aufgabe</div><div class="bigtitle">${esc(it.title)}</div><p class="bigtext">${esc(it.text)}</p>
         <div class="award">${ids.map(id => `<span>${esc(teamName(id))}</span>
-          ${Q.interactivePoints.map((p, k) => `<button data-award="${id}" data-k="${k}" class="${a[k] === id ? "sel" : ""}">${k + 1}. Platz (+${p})</button>`).join("")}`).join("")}</div>
-        <div class="controls"><button class="primary" id="bPrimary">Weiter ▶</button></div>`;
+          ${Q.interactivePoints.map((p, k) => `<button data-award="${id}" data-k="${k}" class="${a[k] === id ? "sel" : ""}">${k + 1}. Platz (+${p})</button>`).join("")}`).join("")}</div>`;
       st.querySelectorAll("[data-award]").forEach(b => b.onclick = () => {
         const id = b.dataset.award, k = +b.dataset.k;
         const arr = (S.awards[S.idx] || []).slice();
@@ -308,15 +310,18 @@
         S.awards[S.idx] = arr; save(); render(); broadcast();
       });
     } else if (it.type === "pause") {
+      primaryLabel = S.pauseEnd ? "Weiter ▶" : `☕ Pause starten (${it.minutes || 5} min)`;
       st.innerHTML = `<div class="bigtitle">${esc(it.title || "Pause")}</div>
         <div class="timer"><span class="big" id="pbig">${String(it.minutes || 5).padStart(2, "0")}:00</span></div>
         ${podium(5)}
-        <div class="controls">${S.pauseEnd ? "" : `<button class="primary" id="bPrimary">Pause starten (${it.minutes || 5} min)</button>`}
-        <button id="bPauseNext">Weiter ▶</button></div>`;
-      $("bPauseNext").onclick = () => enterItem(S.idx + 1);
+        ${S.pauseEnd ? "" : `<div class="controls"><button id="bPauseNext">Pause überspringen</button></div>`}`;
+      if ($("bPauseNext")) $("bPauseNext").onclick = () => enterItem(S.idx + 1);
     } else if (it.type === "end") {
       st.innerHTML = `<div class="bigtitle">${esc(it.title || "Siegerehrung")}</div>${podium(99)}`;
     }
+    if (primaryLabel) st.insertAdjacentHTML("beforeend", `<div class="nextbar"><button class="primary big" id="bPrimary">${esc(primaryLabel)}</button></div>`);
+    const viewKey = S.idx + "|" + S.phase + "|" + showJoin;
+    if (viewKey !== render.lastKey) { st.scrollTop = 0; render.lastKey = viewKey; }
     const bp = $("bPrimary"); if (bp) bp.onclick = primary;
     const pl = $("bPlay"); if (pl) pl.onclick = () => playAudio(it.audio);
     const pr = $("bPlayRev"); if (pr) pr.onclick = () => playAudio(it.revealAudio || it.audio);
@@ -325,7 +330,6 @@
     renderScore();
     renderNotes();
     tick();
-    try { modChannel.postMessage({ idx: S.idx, phase: S.phase }); } catch {}
   }
 
   function podium(n) {
@@ -391,22 +395,12 @@
   }
   setInterval(tick, 200);
 
-  // ---------- Moderator-Fenster ----------
-  const modChannel = "BroadcastChannel" in window ? new BroadcastChannel("tq-mod") : { postMessage() {} };
-  if (modChannel.addEventListener) modChannel.addEventListener("message", e => {
-    if (e.data === "hello") modChannel.postMessage({ idx: S.idx, phase: S.phase });
-    else if (e.data && e.data.cmd === "next") enterItem(S.idx + 1);
-    else if (e.data && e.data.cmd === "prev") enterItem(S.idx - 1);
-    else if (e.data && e.data.cmd === "primary") primary();
-  });
-
   // ---------- Buttons & Tastatur ----------
   $("bPrev").onclick = () => enterItem(S.idx - 1);
   $("bNext").onclick = () => enterItem(S.idx + 1);
   $("bJoin").onclick = () => { showJoin = !showJoin; render(); };
   $("bLock").onclick = () => { S.locked = !S.locked; save(); render(); };
   $("bAdmin").onclick = () => { admin = !admin; render(); };
-  $("bMod").onclick = () => window.open("moderator.html", "tq-moderator", "width=520,height=720");
   $("bResetItem").onclick = () => {
     if (!confirm("Antworten/Punkte der aktuellen Frage löschen und Frage neu starten?")) return;
     delete S.answers[S.idx]; delete S.awards[S.idx]; S.phase = "show"; S.openedAt = null; S.pauseEnd = null; audio.pause();

@@ -1,7 +1,7 @@
 // Quiz-Inhalt. Typen:
 //   intro       – Startfolie (nur Moderation)
 //   mc          – Multiple Choice, 4 Antworten, correct = Index 0..3
-//                 optional: audio (Dateiname in /audio), revealAudio, multiplier (z.B. 2 fürs Finale), category
+//                 optional: img (Bild über der Frage, z.B. "img/pizza.jpg"), audio (Dateiname in /audio), revealAudio, multiplier (z.B. 2 fürs Finale), category
 //   interactive – Aufgabe, Punkte vergibt der Host per Klick (+30 / +15)
 //   pause       – Pause mit Countdown (minutes)
 //   end         – Siegerehrung
@@ -33,6 +33,7 @@ window.QUIZ = {
     {
       type: "mc", category: "Tech",
       q: "Wofür steht „GPT“ in ChatGPT?",
+      img: "img/chatgpt.jpg",
       a: ["General Purpose Technology", "Generative Pre-trained Transformer", "Global Predictive Text", "Generated Personal Thinking"],
       correct: 1,
       explain: "Generative Pre-trained Transformer – „Transformer“ ist die Architektur, die Google 2017 vorgestellt hat.",
@@ -41,6 +42,7 @@ window.QUIZ = {
     {
       type: "mc", category: "Internet",
       q: "Was ist im allerersten YouTube-Video (2005) zu sehen?",
+      img: "img/youtube.jpg",
       a: ["Eine Katze am Klavier", "Ein Typ vor Elefanten im Zoo", "Ein lachendes Baby", "Ein Skateboard-Unfall"],
       correct: 1,
       explain: "„Me at the zoo“ – YouTube-Mitgründer Jawed Karim vor den Elefanten im Zoo von San Diego, 19 Sekunden lang.",
@@ -49,6 +51,7 @@ window.QUIZ = {
     {
       type: "mc", category: "Essen",
       q: "In welchem Land wurde die Pizza Hawaii erfunden?",
+      img: "img/pizza.jpg",
       a: ["USA (Hawaii)", "Kanada", "Italien", "Australien"],
       correct: 1,
       explain: "1962 in Chatham, Ontario (Kanada) – in einem Restaurant von Sam Panopoulos.",
@@ -57,6 +60,7 @@ window.QUIZ = {
     {
       type: "mc", category: "Serie",
       q: "In „Haus des Geldes“ tragen die Räuber Masken von welchem Künstler?",
+      img: "img/banco.jpg",
       a: ["Pablo Picasso", "Salvador Dalí", "Frida Kahlo", "Vincent van Gogh"],
       correct: 1,
       explain: "Salvador Dalí – die Masken wurden danach zu einem weltweiten Protestsymbol.",
@@ -65,6 +69,7 @@ window.QUIZ = {
     {
       type: "mc", category: "Film",
       q: "Welcher dieser Joker-Darsteller hat für die Rolle einen Oscar gewonnen?",
+      img: "img/joker.jpg",
       a: ["Jack Nicholson", "Jared Leto", "Joaquin Phoenix", "Mark Hamill"],
       correct: 2,
       explain: "Joaquin Phoenix für „Joker“ (2019). Heath Ledger gewann ebenfalls (posthum, The Dark Knight) – stand aber nicht zur Wahl. Mark Hamill spricht den Joker in Animationsfilmen.",
@@ -73,6 +78,7 @@ window.QUIZ = {
     {
       type: "mc", category: "Film",
       q: "Welcher Film hat weltweit am meisten an den Kinokassen eingespielt (nicht inflationsbereinigt)?",
+      img: "img/kino.jpg",
       a: ["Avengers: Endgame", "Titanic", "Avatar (2009)", "Avatar: The Way of Water"],
       correct: 2,
       explain: "Avatar (2009) – rund 2,9 Mrd. US-Dollar, knapp vor Avengers: Endgame."
@@ -86,6 +92,7 @@ window.QUIZ = {
     {
       type: "mc", category: "Schätzfrage",
       q: "Für wie viel wurde 2017 das teuerste Gemälde aller Zeiten versteigert (Leonardo da Vincis „Salvator Mundi“)?",
+      img: "img/salvator.jpg",
       a: ["ca. 45 Mio. $", "ca. 120 Mio. $", "ca. 450 Mio. $", "ca. 1,2 Mrd. $"],
       correct: 2,
       explain: "450,3 Mio. US-Dollar bei Christie's – das Bild ist seitdem kaum öffentlich zu sehen.",
@@ -94,6 +101,7 @@ window.QUIZ = {
     {
       type: "mc", category: "🚗 BMW × Film",
       q: "In „GoldenEye“ (1995) fuhr James Bond erstmals einen BMW. Welches Modell war es?",
+      img: "img/brosnan.jpg",
       a: ["BMW Z3", "BMW Z8", "BMW 750iL", "BMW M1"],
       correct: 0,
       explain: "Der BMW Z3 – Teil eines damals spektakulären Product-Placement-Deals. Danach folgten der 750iL (Der Morgen stirbt nie, 1997) und der Z8 (Die Welt ist nicht genug, 1999).",
@@ -109,6 +117,7 @@ window.QUIZ = {
     {
       type: "mc", category: "Wissen mit Augenzwinkern",
       q: "Wofür steht der Name IKEA?",
+      img: "img/ikea.jpg",
       a: ["Ingvar Kamprad + Hof + Dorf seiner Kindheit", "„Inredning Kvalitet Enkel Arkitektur“ (Einrichtung, Qualität, einfache Architektur)", "Die Initialen der vier Gründer", "Altschwedisch für „Gemütliches Heim“"],
       correct: 0,
       explain: "Ingvar Kamprad, Elmtaryd (Hof der Familie), Agunnaryd (Dorf in Småland).",
@@ -134,6 +143,7 @@ window.QUIZ = {
     {
       type: "mc", category: "Film",
       q: "Wie viele Oscars gewann Christopher Nolans „Oppenheimer“ 2024?",
+      img: "img/oppenheimer.jpg",
       a: ["3", "5", "7", "11"],
       correct: 2,
       explain: "7 Oscars, u. a. Bester Film, Regie und Hauptdarsteller (Cillian Murphy).",
@@ -142,6 +152,7 @@ window.QUIZ = {
     {
       type: "mc", category: "Film",
       q: "Welche Geschwindigkeit muss der DeLorean in „Zurück in die Zukunft“ erreichen, um durch die Zeit zu reisen?",
+      img: "img/delorean.jpg",
       a: ["66 mph", "77 mph", "88 mph", "99 mph"],
       correct: 2,
       explain: "88 Meilen pro Stunde – ca. 142 km/h. „Great Scott!“",
@@ -158,6 +169,7 @@ window.QUIZ = {
     {
       type: "mc", category: "Musik",
       q: "Wie viel spielte Taylor Swifts „Eras Tour“ (2023–2024) ungefähr ein?",
+      img: "img/swift.jpg",
       a: ["ca. 200 Mio. $", "ca. 700 Mio. $", "ca. 2 Mrd. $", "ca. 5 Mrd. $"],
       correct: 2,
       explain: "Über 2 Mrd. US-Dollar – die erste Tour überhaupt, die diese Marke geknackt hat.",
@@ -198,6 +210,7 @@ window.QUIZ = {
     {
       type: "mc", category: "Musik",
       q: "Welches Land hat den Eurovision Song Contest 2024 gewonnen?",
+      img: "img/malmo.jpg",
       a: ["Kroatien", "Schweiz", "Schweden", "Italien"],
       correct: 1,
       explain: "Die Schweiz mit Nemo und „The Code“ – Kroatien wurde Zweiter."
@@ -205,6 +218,7 @@ window.QUIZ = {
     {
       type: "mc", category: "🧠 Aufgepasst!",
       q: "Aus welchem Land stammte der Erfinder der Pizza Hawaii ursprünglich?",
+      img: "img/pizza.jpg",
       a: ["Italien", "Griechenland", "Kanada", "Libanon"],
       correct: 1,
       explain: "Sam Panopoulos war gebürtiger Grieche – das kam bei der Pizza-Frage vor. Wer aufgepasst hat, ist im Vorteil!"
