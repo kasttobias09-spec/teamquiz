@@ -180,11 +180,11 @@ window.QUIZ = {
     },
     {
       type: "mc", category: "🎵 Song – rückwärts!",
-      q: "Welcher ABBA-Song ist das (rückwärts abgespielt)?",
-      a: ["Mamma Mia", "Dancing Queen", "Waterloo", "Take a Chance on Me"],
+      q: "Welcher Song ist das (rückwärts abgespielt)?",
+      a: ["Coldplay – Fix You", "Coldplay – Viva la Vida", "Coldplay – Paradise", "Coldplay – Yellow"],
       correct: 1,
-      explain: "Dancing Queen (1976).",
-      note: "🎵 Vom Handy abspielen: ca. 10 Sekunden Refrain RÜCKWÄRTS (vorher z. B. mit Audacity: Effekt → Umkehren erstellen). Nach der Auflösung den Refrain normal vorwärts abspielen."
+      explain: "Viva la Vida (2008) – bei den Grammys 2009 als „Song des Jahres“ ausgezeichnet.",
+      note: "🎵 Vom Handy abspielen: Viva la Vida RÜCKWÄRTS, ca. 10 Sekunden, direkt nach „Start“. Nach der Auflösung kurz vorwärts abspielen."
     },
     {
       type: "mc", category: "Gaming",
