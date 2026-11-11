@@ -13,6 +13,8 @@
   let S;
   try { S = JSON.parse(localStorage.getItem(STORE)) || newState(); } catch { S = newState(); }
   if (S.idx >= ITEMS.length) S.idx = 0;
+  S.chal = S.chal || {};
+  const GO_DELAY = 3000; // 3-2-1-Countdown vor Challenge-Start
   if (!S.remoteKey) S.remoteKey = Math.random().toString(36).slice(2, 12);
   const SCORE_TYPES = ["pause", "standings", "end"]; // nur hier wird der Punktestand gezeigt
   const scoreVisible = () => SCORE_TYPES.includes(item().type);
@@ -117,6 +119,7 @@
     }
     const id = conn.teamId;
     if (!id || !S.teams[id]) return;
+    if (d.t === "ready" || d.t === "prog") return onChallenge(id, d);
     if (d.t === "answer") {
       const it = item();
       if (it.type !== "mc" || S.phase !== "open" || d.idx !== S.idx) return;
@@ -153,6 +156,11 @@
     } else if (it.type === "interactive") {
       v.title = it.title; v.text = it.text;
       const a = S.awards[S.idx] || []; const k = a.indexOf(id); v.place = k >= 0 ? k + 1 : null;
+    } else if (it.type === "challenge") {
+      v.title = it.title; v.text = it.text; v.shakes = it.shakes; v.holdSeconds = it.holdSeconds;
+      if (S.phase === "open") v.goInMs = Math.max(0, S.openedAt + GO_DELAY - Date.now());
+      const x = chalOf()[id]; v.done = !!(x && x.stage === "done"); v.ready = !!(x && x.ready);
+      const a = S.awards[S.idx] || []; const k = a.indexOf(id); v.place = k >= 0 ? k + 1 : null;
     } else if (it.type === "pause") {
       v.title = it.title; v.remainingMs = S.pauseEnd ? Math.max(0, S.pauseEnd - Date.now()) : null;
     } else if (it.type === "end" || it.type === "standings") {
@@ -165,6 +173,45 @@
   }
   function sendState(id) { if (S.teams[id]) send(id, viewFor(id)); }
   function broadcast() { for (const id of conns.keys()) sendState(id); }
+
+  // ---------- Handy-Challenge ----------
+  function chalOf(i = S.idx) { return (S.chal[i] = S.chal[i] || {}); }
+  function onChallenge(id, d) {
+    const it = item();
+    if (it.type !== "challenge" || d.idx !== S.idx) return;
+    const c = chalOf(), me = (c[id] = c[id] || { stage: "wait", value: 0 });
+    if (d.t === "ready") { me.mode = d.mode === "motion" ? "motion" : "none"; me.ready = me.mode === "motion"; save(); render(); return; }
+    if (S.phase !== "open" || Date.now() < S.openedAt + GO_DELAY - 300 || me.stage === "done") return;
+    if (d.stage === "done") {
+      me.stage = "done"; me.value = 0;
+      const a = (S.awards[S.idx] = S.awards[S.idx] || []);
+      me.place = Object.values(c).filter(x => x.stage === "done").length;
+      if (!a.includes(id)) for (let k = 0; k < Q.interactivePoints.length; k++) if (!a[k]) { a[k] = id; break; }
+      save(); render(); broadcast();
+      return;
+    }
+    if (d.stage === "shake" || d.stage === "hold") { me.stage = d.stage; me.value = +d.value || 0; }
+    updateBars();
+  }
+  function chalLabel(it, x) {
+    if (!x || x.stage === "wait") return "bereit…";
+    if (x.stage === "shake") return `📳 ${x.value}/${it.shakes}`;
+    if (x.stage === "hold") return `🫗 ${(x.value / 1000).toFixed(1)} / ${it.holdSeconds} s`;
+    return (["🥇", "🥈", "🥉"][x.place - 1] || x.place + ".") + " geschafft!";
+  }
+  function updateBars() {
+    const it = item(); if (it.type !== "challenge") return;
+    const c = chalOf();
+    for (const id of S.order) {
+      const x = c[id], sEl = $("cs-" + id), hEl = $("ch-" + id), lEl = $("cl-" + id);
+      if (!sEl) continue;
+      const target = it.shakes;
+      const sh = !x ? 0 : x.stage === "shake" ? Math.min(1, x.value / target) : x.stage === "wait" ? 0 : 1;
+      const ho = !x ? 0 : x.stage === "hold" ? Math.min(1, x.value / (it.holdSeconds * 1000)) : x.stage === "done" ? 1 : 0;
+      sEl.style.width = sh * 100 + "%"; hEl.style.width = ho * 100 + "%";
+      lEl.textContent = chalLabel(it, x);
+    }
+  }
 
   // ---------- Tablet-Fernbedienung ----------
   function remoteView() {
@@ -179,7 +226,8 @@
       pauseRemainingMs: S.pauseEnd ? Math.max(0, S.pauseEnd - Date.now()) : null,
       awards: S.awards[S.idx] || [],
       interactivePoints: Q.interactivePoints,
-      teams: standings().map(x => ({ ...x, online: conns.has(x.id), answer: ans[x.id] || null }))
+      teams: standings().map(x => ({ ...x, online: conns.has(x.id), answer: ans[x.id] || null,
+        chal: it.type === "challenge" ? chalLabel(it, chalOf()[x.id]) + ((chalOf()[x.id] || {}).mode === "none" ? " ⚠ keine Sensoren" : "") : null }))
     };
   }
   function sendRemote(c) { if (c.open) { try { c.send(remoteView()); } catch {} } }
@@ -196,7 +244,7 @@
       case "prev": enterItem(S.idx - 1); break;
       case "next": enterItem(S.idx + 1); break;
       case "primary": primary(); break;
-      case "award": if (S.teams[d.id] && it.type === "interactive") toggleAward(d.id, +d.k); break;
+      case "award": if (S.teams[d.id] && (it.type === "interactive" || it.type === "challenge")) toggleAward(d.id, +d.k); break;
       case "adj": if (S.teams[d.id]) { S.manual[d.id] = (S.manual[d.id] || 0) + (+d.v || 0); save(); render(); broadcast(); } break;
       case "play": if (it.audio) playAudio(d.reveal && it.revealAudio ? it.revealAudio : it.audio); break;
       case "stop": audio.pause(); break;
@@ -212,6 +260,7 @@
     const it = item();
     S.openedAt = null; S.pauseEnd = null;
     S.phase = it.type === "mc" && S.answers[S.idx] && Object.keys(S.answers[S.idx]).length ? "reveal" : "show";
+    if (it.type === "challenge" && Object.values(chalOf()).some(x => x.stage === "done")) S.phase = "reveal";
     if (it.type === "end") S.phase = "reveal";
     showJoin = false; showRemote = false;
     save(); render(); broadcast();
@@ -241,6 +290,13 @@
       if (S.phase === "show") openQuestion();
       else if (S.phase === "open" || S.phase === "closed") reveal();
       else enterItem(S.idx + 1);
+    } else if (it.type === "challenge") {
+      if (S.phase === "show") {
+        for (const x of Object.values(chalOf())) { x.stage = "wait"; x.value = 0; delete x.place; }
+        S.awards[S.idx] = []; S.phase = "open"; S.openedAt = Date.now();
+      } else if (S.phase === "open") S.phase = "reveal";
+      else return enterItem(S.idx + 1);
+      save(); render(); broadcast();
     } else if (it.type === "pause" && !S.pauseEnd) {
       S.pauseEnd = Date.now() + (it.minutes || 5) * 60000; save(); render(); broadcast();
     } else enterItem(S.idx + 1);
@@ -357,6 +413,30 @@
         <div class="award">${ids.map(id => `<span>${esc(teamName(id))}</span>
           ${Q.interactivePoints.map((p, k) => `<button data-award="${id}" data-k="${k}" class="${a[k] === id ? "sel" : ""}">${k + 1}. Platz</button>`).join("")}`).join("")}</div>`;
       st.querySelectorAll("[data-award]").forEach(b => b.onclick = () => toggleAward(b.dataset.award, +b.dataset.k));
+    } else if (it.type === "challenge") {
+      const c = chalOf();
+      const a = S.awards[S.idx] || [];
+      let html = `<div class="category">Handy-Challenge</div><div class="bigtitle">${esc(it.title)}</div>`;
+      if (S.phase === "show") {
+        primaryLabel = "▶ Los! (3-2-1)";
+        html += `<p class="bigtext">${esc(it.text)}</p>
+          <p class="bigtext">👉 Jetzt auf dem Team-Handy <b>„Sensoren freigeben“</b> antippen.</p>
+          <div class="status">${ids.map(id => { const x = c[id]; return `<span class="chip ${x && x.ready ? "done" : ""}">${x && x.ready ? "✓ " : x && x.mode === "none" ? "⚠ " : "… "}${esc(teamName(id))}</span>`; }).join("")}</div>
+          <p class="muted">✓ = bereit · … = noch nicht freigegeben · ⚠ = Handy liefert keine Sensordaten → anderes Handy nehmen</p>`;
+      } else {
+        if (S.phase === "open") html += `<div class="center"><span class="countdown" id="cdown"></span></div>`;
+        html += `<div class="crows">${ids.map(id => `<div class="crow"><span class="n">${esc(teamName(id))}</span>
+          <div class="cbar"><div class="half"><div class="cshake" id="cs-${id}"></div></div><div class="half"><div class="chold" id="ch-${id}"></div></div></div>
+          <span class="clabel" id="cl-${id}"></span></div>`).join("")}</div>
+          <p class="muted">Linke Hälfte: 📳 Schütteln · rechte Hälfte: 🫗 ruhig halten</p>`;
+        if (S.phase === "open") primaryLabel = "Beenden";
+        else {
+          primaryLabel = "Weiter ▶";
+          html += `<div class="bigtext">${a.filter(Boolean).map((id, k) => `${["🥇", "🥈"][k] || ""} ${esc(teamName(id))}`).join(" &nbsp; ") || "Niemand hat es geschafft."}</div>`;
+        }
+      }
+      st.innerHTML = html;
+      updateBars();
     } else if (it.type === "pause") {
       primaryLabel = S.pauseEnd ? "Weiter ▶" : `☕ Pause starten (${it.minutes || 5} min)`;
       st.innerHTML = `<div class="bigtitle">${esc(it.title || "Pause")}</div>
@@ -444,13 +524,19 @@
       $("tpts").textContent = S.phase === "open" ? `richtig jetzt: ${mult(it) * Math.max(0, Q.maxPoints - Math.floor(el / 1000))} Punkte` : "Zeit abgelaufen";
       if (S.phase === "open" && el >= ANS_MS) closeQuestion();
     }
+    if (it.type === "challenge" && S.phase === "open" && $("cdown")) {
+      const g = S.openedAt + GO_DELAY - Date.now();
+      $("cdown").textContent = g > 0 ? Math.ceil(g / 1000) : "LOS!";
+      $("cdown").style.opacity = g > -2500 ? 1 : 0;
+    }
     if (it.type === "pause" && S.pauseEnd && $("pbig")) {
       const rem = Math.max(0, S.pauseEnd - Date.now());
       $("pbig").textContent = fmt(rem);
     }
   }
   setInterval(tick, 200);
-  setInterval(sendRemotes, 3000);
+  setInterval(() => sendRemotes(), item().type === "challenge" ? 1000 : 3000);
+  setInterval(() => { if (item().type === "challenge" && S.phase === "open") sendRemotes(); }, 1000);
 
   // ---------- Buttons & Tastatur ----------
   $("bPrev").onclick = () => enterItem(S.idx - 1);

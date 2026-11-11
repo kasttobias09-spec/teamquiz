@@ -119,6 +119,13 @@
       if (d.phase === "open" && d.type === "mc" && starts[d.idx] === undefined) {
         starts[d.idx] = performance.now() - (d.ansMs - d.remainingMs);
       }
+      if (d.type === "challenge") {
+        if (C.idx !== d.idx) { C.idx = d.idx; C.stage = "wait"; C.count = 0; C.holdMs = 0; C.holdStart = null; C.goAt = null; }
+        if (d.phase === "open" && !C.goAt) { C.goAt = performance.now() + (d.goInMs || 0); C.stage = d.done ? "done" : "shake"; C.count = 0; C.holdMs = 0; }
+        if (d.phase === "show") { C.goAt = null; C.stage = "wait"; C.count = 0; }
+        if (C.mode && !d.ready && conn && conn.open) conn.send({ t: "ready", idx: d.idx, mode: C.mode });
+        if (C.mode && !C.listening) { window.addEventListener("devicemotion", onMotion); C.listening = true; }
+      }
       st = d;
       render();
     }
@@ -131,6 +138,91 @@
     try { conn.send({ t: "answer", idx: st.idx, choice: k, elapsedMs: el }); } catch {}
     if (navigator.vibrate) navigator.vibrate(30);
     render();
+  }
+
+  // ---------- Handy-Challenge (Schütteln + ruhig halten) ----------
+  const SHAKE_HI = 14, SHAKE_LO = 6;   // m/s² ohne Schwerkraft
+  const STILL_MAX = 1.6;               // darüber = gewackelt
+  const C = { mode: null, listening: false, idx: null, stage: "wait", count: 0, holdStart: null, holdMs: 0, armed: true, wobbleAt: 0, flat: true, lastSent: 0, sentKey: "" };
+
+  async function enableSensors() {
+    let ok = false;
+    try {
+      if (typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === "function") {
+        ok = (await DeviceMotionEvent.requestPermission()) === "granted";
+      } else ok = typeof DeviceMotionEvent !== "undefined";
+    } catch { ok = false; }
+    if (ok) {
+      if (!C.listening) { window.addEventListener("devicemotion", onMotion); C.listening = true; }
+      // Nur echte Messwerte zählen (Desktop-Browser feuern teils leere Events)
+      const got = await new Promise(r => {
+        let done = false;
+        const h = e => { const g = e.accelerationIncludingGravity, a = e.acceleration; if ((g && g.x != null) || (a && a.x != null)) { if (!done) { done = true; window.removeEventListener("devicemotion", h); r(true); } } };
+        window.addEventListener("devicemotion", h);
+        setTimeout(() => { if (!done) { done = true; window.removeEventListener("devicemotion", h); r(false); } }, 1500);
+      });
+      C.mode = got ? "motion" : null;
+    } else C.mode = null;
+    C.failed = !C.mode;
+    if (conn && conn.open && st) conn.send({ t: "ready", idx: st.idx, mode: C.mode || "none" });
+    render();
+  }
+  function chalRunning() { return st && st.type === "challenge" && st.phase === "open" && !st.done && C.idx === st.idx && C.goAt && performance.now() >= C.goAt && C.stage !== "done"; }
+  function onMotion(e) {
+    let mag;
+    const a = e.acceleration, g = e.accelerationIncludingGravity || {};
+    if (a && a.x != null) mag = Math.hypot(a.x, a.y, a.z);
+    else if (g.x != null) mag = Math.abs(Math.hypot(g.x, g.y, g.z) - 9.81);
+    else return;
+    C.flat = g.z != null ? Math.abs(g.z) > 8.0 : true;
+    if (!chalRunning() || C.mode !== "motion") return;
+    const now = performance.now();
+    if (C.stage === "shake") {
+      if (C.armed && mag > SHAKE_HI) { C.count++; C.armed = false; }
+      else if (mag < SHAKE_LO) C.armed = true;
+      if (C.count >= st.shakes) { C.stage = "hold"; C.holdStart = null; C.holdMs = 0; }
+    } else if (C.stage === "hold") {
+      if (mag > STILL_MAX || !C.flat) { if (C.holdMs > 400) C.wobbleAt = now; C.holdStart = null; C.holdMs = 0; }
+      else { if (!C.holdStart) C.holdStart = now; C.holdMs = now - C.holdStart; }
+      if (C.holdMs >= st.holdSeconds * 1000) finishChallenge();
+    }
+  }
+  function finishChallenge() {
+    C.stage = "done";
+    if (navigator.vibrate) navigator.vibrate([80, 60, 80]);
+    try { conn.send({ t: "prog", idx: st.idx, stage: "done" }); } catch {}
+    render();
+  }
+  function chalLoop() {
+    if (st && st.type === "challenge") {
+      const now = performance.now();
+      if (chalRunning() && now - C.lastSent > 250) {
+        const val = C.stage === "shake" ? C.count : Math.round(C.holdMs);
+        const k = C.stage + val;
+        if (k !== C.sentKey) { C.sentKey = k; C.lastSent = now; try { conn.send({ t: "prog", idx: st.idx, stage: C.stage, value: val }); } catch {} }
+      }
+      updateChal();
+    }
+  }
+  setInterval(chalLoop, 100);
+  function updateChal() {
+    const el = $("chal"); if (!el || !st) return;
+    const now = performance.now();
+    let h;
+    if (st.done || C.stage === "done") h = `<div class="huge" style="color:var(--ok)">✅ Geschafft!</div>${st.place ? `<p class="huge">${st.place}. Platz</p>` : "<p>Warte auf die anderen …</p>"}`;
+    else if (!C.goAt || now < C.goAt) h = `<div class="huge" style="font-size:6rem">${C.goAt ? Math.ceil((C.goAt - now) / 1000) : "…"}</div><p>Gleich geht's los – Handy gut festhalten!</p>`;
+    else if (C.stage === "shake") {
+      const target = st.shakes;
+      h = `<div class="huge">📳 SCHÜTTELN!</div><div class="huge">${C.count} / ${target}</div>
+        <div class="pbar" style="height:22px"><div style="width:${Math.min(100, C.count / target * 100)}%;background:var(--warn)"></div></div>`;
+    } else {
+      const wob = now - C.wobbleAt < 1200;
+      h = `<div class="huge">🫗 RUHIG HALTEN!</div>
+        <p>Flach auf der ausgestreckten Hand – nicht wackeln!</p>
+        <div class="huge" style="color:${wob ? "var(--bad)" : "var(--text)"}">${wob ? "Gewackelt! Nochmal" : (C.holdMs / 1000).toFixed(1) + " / " + st.holdSeconds + " s"}</div>
+        <div class="pbar" style="height:22px"><div style="width:${Math.min(100, C.holdMs / (st.holdSeconds * 1000) * 100)}%;background:var(--ok)"></div></div>`;
+    }
+    el.innerHTML = h;
   }
 
   // ---------- Anzeige ----------
@@ -162,6 +254,21 @@
           <p>Lösung: <b>${LETTERS[st.correct]} – ${esc(st.a[st.correct])}</b></p>
           ${st.explain ? `<p class="muted">${esc(st.explain)}</p>` : ""}
           </div>`;
+      }
+    } else if (st.type === "challenge") {
+      if (st.phase === "show" || !C.mode) {
+        v.innerHTML = `<div class="card"><h1>${esc(st.title)}</h1><p>${esc(st.text)}</p></div>
+          ${C.mode ? `<div class="card center"><div class="huge" style="color:var(--ok)">✓ Bereit</div><p>Sensoren aktiv. Wartet auf den Start!</p></div>`
+          : `${C.failed ? `<div class="card" style="border:2px solid var(--bad)"><b>⚠ Keine Bewegungsdaten.</b><p class="small">iPhone: „Erlauben“ antippen. Falls abgelehnt: Safari-Tab schließen, Seite neu öffnen und erneut freigeben. Hilft das nicht: anderes Handy nehmen und dem Moderator Bescheid geben.</p></div>` : ""}
+             <button class="primary bigbtn" id="bSens" style="min-height:auto;padding:1.2rem">📲 ${C.failed ? "Nochmal versuchen" : "Sensoren freigeben"}</button><p class="muted center small">Auf dem iPhone mit „Erlauben“ bestätigen.</p>`}`;
+        const b = $("bSens"); if (b) b.onclick = enableSensors;
+      } else if (st.phase === "open" && $("chal")) {
+        updateChal(); // nicht neu aufbauen, sonst gehen Tipp-/Halte-Gesten verloren
+      } else if (st.phase === "open") {
+        v.innerHTML = `<div class="card center" id="chal"></div>`;
+        updateChal();
+      } else {
+        v.innerHTML = `<div class="card center"><h1>${esc(st.title)}</h1>${st.place ? `<p class="huge" style="color:var(--ok)">${st.place}. Platz!</p>` : st.done ? "<p>Geschafft – leider nicht unter den ersten zwei.</p>" : "<p>Vorbei!</p>"}</div>`;
       }
     } else if (st.type === "interactive") {
       v.innerHTML = `<div class="card"><h1>${esc(st.title)}</h1><p>${esc(st.text)}</p>

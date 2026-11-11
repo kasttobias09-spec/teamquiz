@@ -51,6 +51,7 @@
     const it = st.item;
     if (it.type === "intro") return "Los geht's ▶";
     if (it.type === "mc") return st.phase === "show" ? "▶ Start" : (st.phase === "open" || st.phase === "closed") ? "Auflösen" : "Weiter ▶";
+    if (it.type === "challenge") return st.phase === "show" ? "▶ Los! (3-2-1)" : st.phase === "open" ? "Beenden" : "Weiter ▶";
     if (it.type === "pause") return st.pauseRemainingMs == null ? "☕ Pause starten" : "Weiter ▶";
     if (it.type === "end") return "–";
     return "Weiter ▶";
@@ -73,7 +74,7 @@
       if (it.explain) h += `<p class="muted">${esc(it.explain)}</p>`;
       if (it.audio) h += `<div class="controls"><button data-c="play">🔊 ${esc(it.audio)}</button>${it.revealAudio ? `<button data-c="playrev">🔊 Auflösung</button>` : ""}<button data-c="stop">⏹ Stop</button></div>`;
     } else {
-      h += `<h2>${esc(it.type === "interactive" ? "Interaktive Aufgabe" : it.type === "pause" ? "Pause" : it.type === "standings" ? "Zwischenstand" : it.type === "end" ? "Ende" : "Start")}</h2>
+      h += `<h2>${esc(it.type === "interactive" ? "Interaktive Aufgabe" : it.type === "challenge" ? "Handy-Challenge" : it.type === "pause" ? "Pause" : it.type === "standings" ? "Zwischenstand" : it.type === "end" ? "Ende" : "Start")}</h2>
         <div class="rq">${esc(it.title || "")}</div>${it.text ? `<p>${esc(it.text)}</p>` : ""}`;
       if (it.type === "pause") h += `<p class="center"><span class="timerbig" id="rp"></span></p>`;
     }
@@ -86,6 +87,8 @@
       let mid = "";
       if (it.type === "mc" && st.phase !== "show") {
         mid = t.answer ? `<span class="${t.answer.choice === it.correct ? "sol" : ""}">${LETTERS[t.answer.choice]} · ${(t.answer.el / 1000).toFixed(1)}s · ${t.answer.points > 0 ? "+" : ""}${t.answer.points}</span>` : `<span class="muted">–</span>`;
+      } else if (it.type === "challenge") {
+        mid = `<span class="muted">${esc(t.chal || "")}</span>` + st.interactivePoints.map((p, k) => `<button data-award="${t.id}" data-k="${k}" class="${st.awards[k] === t.id ? "sel" : ""}">${k + 1}.</button>`).join("");
       } else if (it.type === "interactive") {
         mid = st.interactivePoints.map((p, k) => `<button data-award="${t.id}" data-k="${k}" class="${st.awards[k] === t.id ? "sel" : ""}">${k + 1}. (+${p})</button>`).join("");
       }

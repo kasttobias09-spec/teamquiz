@@ -126,3 +126,15 @@ button.big { font-size: 1.9rem; font-weight: 700; padding: .75em 3em; border-rad
   .question { font-size: 1.6rem; } .answer { font-size: 1.1rem; } .answers { grid-template-columns: 1fr; }
   .category { font-size: 1rem; } .timer .big { font-size: 3rem; } .explain, .bigtext { font-size: 1.1rem; } .bigtitle { font-size: 2rem; }
 }
+
+/* ---------- Handy-Challenge ---------- */
+.countdown { font-size: 7vw; font-weight: 900; color: var(--warn); transition: opacity .4s; }
+.crows { display: flex; flex-direction: column; gap: .9rem; }
+.crow { display: grid; grid-template-columns: 220px 1fr 240px; gap: 1rem; align-items: center; font-size: 1.6vw; font-weight: 700; }
+.cbar { display: flex; gap: 6px; height: 46px; }
+.cbar .half { flex: 1; background: var(--panel2); border-radius: 10px; overflow: hidden; }
+.cshake, .chold { height: 100%; width: 0; transition: width .25s linear; }
+.cshake { background: linear-gradient(90deg, #f5a524, #e5484d); }
+.chold { background: linear-gradient(90deg, #3b8cff, #2fbf71); }
+.clabel { font-variant-numeric: tabular-nums; }
+.bigbtn { width: 100%; min-height: 42vh; font-size: 2rem; font-weight: 800; border-radius: 20px; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
