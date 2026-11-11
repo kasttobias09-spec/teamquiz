@@ -1,11 +1,12 @@
 // Quiz-Inhalt. Typen:
 //   intro       – Startfolie (nur Moderation)
 //   mc          – Multiple Choice, 4 Antworten, correct = Index 0..3
-//                 optional: img (Bild über der Frage, z.B. "img/pizza.jpg"), audio (Dateiname in /audio), revealAudio, multiplier (z.B. 2 fürs Finale), category
+//                 optional: img (Bild über der Frage, z.B. "img/pizza.jpg"), multiplier (z.B. 2 fürs Finale), category
 //   interactive – Aufgabe, Punkte vergibt der Host per Klick (+30 / +15)
 //   challenge   – Handy-Challenge: shakes× schütteln, dann holdSeconds ruhig halten; Platz 1/2 automatisch
 //                 color = Farbjagd-Farbe (rot|blau|gruen|gelb, weglassen = keine Farbjagd), colorSeconds = Haltedauer
-//                 stillMax = Wackel-Empfindlichkeit in m/s² (kleiner = strenger), practice: true = Testrunde ohne Punkte
+//                 stillMax = Wackel-Empfindlichkeit in m/s² (kleiner = strenger), practice: true = Testrunde ohne Punkte,
+//                 cameraCheck: true = nach dem Test nur Kamerabild zeigen (keine Farbjagd)
 //   pause       – Pause mit Countdown (minutes) + Punktestand
 //   standings   – Zwischenstand (Punkte werden NUR bei pause/standings/end angezeigt)
 //   end         – Siegerehrung
@@ -28,11 +29,10 @@ window.QUIZ = {
     {
       type: "mc", category: "🎵 Song – nur 2 Sekunden!",
       q: "Welcher Song ist das?",
-      audio: "blinding_lights.mp3",
       a: ["The Weeknd – Save Your Tears", "Dua Lipa – Levitating", "Harry Styles – As It Was", "The Weeknd – Blinding Lights"],
       correct: 3,
       explain: "Blinding Lights (2019) – einer der meistgestreamten Songs in der Geschichte von Spotify.",
-      note: "Audio: nur die ersten ~2 Sekunden. Überleitung: „Von Synthie-Pop zu einer Technik, die heute jeder kennt …“"
+      note: "🎵 Vom Handy abspielen: nur die ersten ~2 Sekunden, direkt nach „Start“. Überleitung: „Von Synthie-Pop zu einer Technik, die heute jeder kennt …“"
     },
     {
       type: "mc", category: "Tech",
@@ -59,7 +59,7 @@ window.QUIZ = {
       a: ["USA (Hawaii)", "Italien", "Australien", "Kanada"],
       correct: 3,
       explain: "1962 in Chatham, Ontario (Kanada) – in einem Restaurant von Sam Panopoulos.",
-      note: "WICHTIG für die Aufgepasst-Frage später – beiläufig erzählen: „Der Erfinder Sam Panopoulos war übrigens gebürtiger GRIECHE – ein Grieche erfindet in Kanada eine ‚hawaiianische‘ Pizza, die Italiener hassen. Völkerverständigung pur!“"
+      note: "Fun Fact zum Erzählen: „Der Erfinder Sam Panopoulos war übrigens gebürtiger Grieche – ein Grieche erfindet in Kanada eine ‚hawaiianische‘ Pizza, die Italiener hassen. Völkerverständigung pur!“"
     },
     {
       type: "mc", category: "Serie",
@@ -77,7 +77,7 @@ window.QUIZ = {
       a: ["Jack Nicholson", "Jared Leto", "Mark Hamill", "Joaquin Phoenix"],
       correct: 3,
       explain: "Joaquin Phoenix für „Joker“ (2019). Heath Ledger gewann ebenfalls (posthum, The Dark Knight) – stand aber nicht zur Wahl. Mark Hamill spricht den Joker in Animationsfilmen.",
-      note: "Überleitung: „Oscars sind schön – aber was zählt an der Kinokasse?“"
+      note: "Bild der Spielkarte gut sichtbar stehen lassen (wird später abgefragt – nichts dazu sagen!). Überleitung: „Oscars sind schön – aber was zählt an der Kinokasse?“"
     },
     {
       type: "mc", category: "Film",
@@ -138,11 +138,10 @@ window.QUIZ = {
     {
       type: "mc", category: "🎵 Film-Musik",
       q: "Aus welchem Film stammt dieses Stück?",
-      audio: "inception_time.mp3",
       a: ["Interstellar", "Dunkirk", "The Dark Knight", "Inception"],
       correct: 3,
       explain: "Hans Zimmer – „Time“ aus Inception (2010). Alle vier Filme sind übrigens von Christopher Nolan.",
-      note: "Audio: ca. 10 Sekunden. Überleitung: „Apropos Christopher Nolan …“"
+      note: "🎵 Vom Handy abspielen: ca. 10 Sekunden, direkt nach „Start“. Überleitung: „Apropos Christopher Nolan …“"
     },
     {
       type: "mc", category: "Film",
@@ -182,12 +181,10 @@ window.QUIZ = {
     {
       type: "mc", category: "🎵 Song – rückwärts!",
       q: "Welcher ABBA-Song ist das (rückwärts abgespielt)?",
-      audio: "dancing_queen_rueckwaerts.mp3",
-      revealAudio: "dancing_queen.mp3",
       a: ["Mamma Mia", "Dancing Queen", "Waterloo", "Take a Chance on Me"],
       correct: 1,
       explain: "Dancing Queen (1976).",
-      note: "Audio: ca. 10 Sekunden Refrain rückwärts (Audacity: Effekt → Umkehren). Bei der Auflösung läuft er automatisch vorwärts."
+      note: "🎵 Vom Handy abspielen: ca. 10 Sekunden Refrain RÜCKWÄRTS (vorher z. B. mit Audacity: Effekt → Umkehren erstellen). Nach der Auflösung den Refrain normal vorwärts abspielen."
     },
     {
       type: "mc", category: "Gaming",
@@ -208,13 +205,12 @@ window.QUIZ = {
       type: "challenge",
       practice: true,
       title: "🧪 Testrunde – funktionieren eure Handys?",
-      text: "Gleich kommt eine Handy-Challenge. Wir testen kurz, ob alles klappt: 10× schütteln, 3 Sekunden ruhig und flach halten, dann mit der Kamera etwas BLAUES finden. Keine Punkte – nur zum Ausprobieren!",
-      shakes: 10,
+      text: "Gleich kommt eine Handy-Challenge. Wir testen kurz, ob alles klappt: 3× schütteln, 3 Sekunden ruhig und flach halten – danach geht die Kamera an. Sagt Bescheid, ob ihr das Kamerabild seht! Keine Punkte – nur zum Ausprobieren.",
+      shakes: 3,
       holdSeconds: 3,
       stillMax: 0.6,
-      color: "blau",
-      colorSeconds: 1,
-      note: "Alle Teams: „Sensoren & Kamera freigeben“ antippen und BEIDE Abfragen erlauben (Bewegung + Kamera). Bei ⚠ anderes Handy nehmen. Erst weiter, wenn alle ✓ haben."
+      cameraCheck: true,
+      note: "Alle Teams: „Sensoren & Kamera freigeben“ antippen und BEIDE Abfragen erlauben. Nach dem Test zeigt jedes Handy das Kamerabild – Teams fragen, ob sie es sehen. Bei ⚠ oder ohne Kamerabild: anderes Handy nehmen. Dann weiter."
     },
     {
       type: "challenge",
@@ -243,11 +239,11 @@ window.QUIZ = {
     },
     {
       type: "mc", category: "🧠 Aufgepasst!",
-      q: "Aus welchem Land stammte der Erfinder der Pizza Hawaii ursprünglich?",
-      img: "img/pizza.jpg",
-      a: ["Italien", "Kanada", "Libanon", "Griechenland"],
+      q: "Bei der Joker-Frage war eine Spielkarte zu sehen. Was stand unten auf der Karte?",
+      a: ["JOKER", "THE FOOL", "JOLLY JOKER", "THE JOLLY"],
       correct: 3,
-      explain: "Sam Panopoulos war gebürtiger Grieche – das kam bei der Pizza-Frage vor. Wer aufgepasst hat, ist im Vorteil!"
+      explain: "„THE JOLLY“ – eine italienische Joker-Karte. Wer bei den Bildern genau hingeschaut hat, ist im Vorteil!",
+      note: "Bild NICHT nochmal zeigen. Bei der Auflösung darfst du verraten: Auch Bilder können später wichtig werden."
     },
     {
       type: "mc", category: "🏁 FINALE – doppelte Punkte!",

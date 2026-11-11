@@ -170,3 +170,35 @@ button.big { font-size: 1.9rem; font-weight: 700; padding: .75em 3em; border-rad
 .camwrap video { width: 100%; height: 100%; object-fit: cover; display: block; }
 .camwrap .ring { position: absolute; left: 50%; top: 50%; width: 46%; aspect-ratio: 1; transform: translate(-50%, -50%); border-radius: 50%; border: 6px solid #fff; box-shadow: 0 0 0 9999px rgba(0,0,0,.35); transition: border-color .2s; }
 .camwrap .ring.hit { border-color: var(--ok); }
+
+/* ---------- Kompaktes Layout (alles ohne Scrollen sichtbar) ---------- */
+.main { grid-template-columns: 1fr; }
+.side { display: none; position: fixed; right: 12px; top: 60px; width: 340px; max-height: calc(100vh - 80px); z-index: 50; border-radius: 14px; box-shadow: 0 10px 40px #000a; }
+.side.admin, .side.notesopen { display: flex; }
+.topbar { padding: .4rem .8rem; }
+.topbar button { padding: .4em .8em; }
+.stage { padding: 1.2vh 2.5vw 1.6vh; gap: 1.4vh; }
+.waitbar { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; min-height: 2.2em; font-size: clamp(.85rem, 2.2vh, 1.2rem); }
+.waitbar .chip { padding: .25em .8em; }
+.qimg img { max-height: 30vh; }
+.qimg.small img { max-height: 15vh; }
+.category { font-size: clamp(.8rem, min(1.2vw, 2.3vh), 1.3rem); }
+.question { font-size: clamp(1.25rem, min(2.4vw, 4.6vh), 3rem); }
+.answers { gap: 1.2vh 1rem; }
+.answer { padding: 1.2vh 1rem; font-size: clamp(1rem, min(1.5vw, 3vh), 1.8rem); }
+.timer { gap: 1rem; }
+.timer .big { font-size: clamp(2rem, min(4vw, 8vh), 5rem); }
+.timer .pts { font-size: clamp(.85rem, min(1.2vw, 2.3vh), 1.3rem); }
+.explain { font-size: clamp(.95rem, min(1.3vw, 2.6vh), 1.5rem); padding: 1vh 1.1rem; }
+.bigtitle { font-size: clamp(1.5rem, min(3.6vw, 6.5vh), 4rem); }
+.bigtext { font-size: clamp(1rem, min(1.7vw, 3.2vh), 2rem); margin: .3em 0; }
+.lobby { gap: 2rem; }
+.qr svg, .qr img { width: min(24vw, 40vh); }
+.podium ol { gap: 1vh; margin: 0; }
+.podium li { font-size: clamp(1rem, min(2vw, 3.6vh), 2.2rem); padding: 1vh 1.2rem; }
+.podium li:first-child { font-size: clamp(1.2rem, min(2.6vw, 4.6vh), 2.8rem); }
+.crow { font-size: clamp(.95rem, min(1.6vw, 3vh), 1.8rem); }
+.cbar { height: clamp(26px, 5vh, 46px); }
+.countdown { font-size: clamp(2.5rem, min(7vw, 12vh), 8rem); line-height: 1; }
+.nextbar { padding-top: .4vh; }
+button.big { font-size: clamp(1.1rem, 2.8vh, 1.8rem); padding: .55em 2.8em; }

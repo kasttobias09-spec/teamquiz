@@ -72,7 +72,6 @@
       h += it.a.map((t, k) => `<div class="ra ${k === it.correct ? "ok" : ""}"><span class="letter c${LETTERS[k]}">${LETTERS[k]}</span><span>${esc(t)}</span>${k === it.correct ? '<span class="sol" style="margin-left:auto">✔ richtig</span>' : ""}</div>`).join("");
       if (st.phase === "open" || st.phase === "closed") h += `<p class="center"><span class="timerbig" id="rt"></span></p>`;
       if (it.explain) h += `<p class="muted">${esc(it.explain)}</p>`;
-      if (it.audio) h += `<div class="controls"><button data-c="play">🔊 ${esc(it.audio)}</button>${it.revealAudio ? `<button data-c="playrev">🔊 Auflösung</button>` : ""}<button data-c="stop">⏹ Stop</button></div>`;
     } else {
       h += `<h2>${esc(it.type === "interactive" ? "Interaktive Aufgabe" : it.type === "challenge" ? "Handy-Challenge" : it.type === "pause" ? "Pause" : it.type === "standings" ? "Zwischenstand" : it.type === "end" ? "Ende" : "Start")}</h2>
         <div class="rq">${esc(it.title || "")}</div>${it.text ? `<p>${esc(it.text)}</p>` : ""}`;

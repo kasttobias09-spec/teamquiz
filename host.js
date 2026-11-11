@@ -160,6 +160,7 @@
       v.title = it.title; v.text = it.text; v.shakes = it.shakes; v.holdSeconds = it.holdSeconds;
       v.stillMax = it.stillMax || 0.6; v.practice = !!it.practice;
       v.color = it.color || null; v.colorSeconds = it.colorSeconds || 2;
+      v.needCam = !!(it.color || it.cameraCheck); v.cameraCheck = !!it.cameraCheck;
       if (S.phase === "open") v.goInMs = Math.max(0, S.openedAt + GO_DELAY - Date.now());
       const x = chalOf()[id]; v.done = !!(x && x.stage === "done"); v.ready = !!(x && x.ready);
       const a = S.awards[S.idx] || []; const k = a.indexOf(id); v.place = k >= 0 ? k + 1 : null;
@@ -184,7 +185,7 @@
     const c = chalOf(), me = (c[id] = c[id] || { stage: "wait", value: 0 });
     if (d.t === "ready") {
       me.mode = d.mode === "motion" ? "motion" : "none"; me.cam = !!d.cam;
-      me.ready = me.mode === "motion" && (!it.color || me.cam);
+      me.ready = me.mode === "motion" && (!(it.color || it.cameraCheck) || me.cam);
       save(); render(); return;
     }
     if (S.phase !== "open" || Date.now() < S.openedAt + GO_DELAY - 300 || me.stage === "done") return;
@@ -228,7 +229,7 @@
     return {
       t: "rstate", idx: S.idx, total: ITEMS.length, phase: S.phase, code: S.code, locked: S.locked,
       item: { type: it.type, category: it.category, q: it.q, a: it.a, correct: it.correct, explain: it.explain, note: it.note,
-        title: it.title, text: it.text, audio: it.audio, revealAudio: it.revealAudio, img: it.img, multiplier: it.multiplier, minutes: it.minutes, practice: !!it.practice },
+        title: it.title, text: it.text, img: it.img, multiplier: it.multiplier, minutes: it.minutes, practice: !!it.practice },
       next: ITEMS[S.idx + 1] ? { type: ITEMS[S.idx + 1].type, title: ITEMS[S.idx + 1].title, q: ITEMS[S.idx + 1].q, note: ITEMS[S.idx + 1].note } : null,
       ansMs: ANS_MS,
       remainingMs: S.phase === "open" ? Math.max(0, ANS_MS - (Date.now() - S.openedAt)) : null,
@@ -255,8 +256,6 @@
       case "primary": primary(); break;
       case "award": if (S.teams[d.id] && (it.type === "interactive" || (it.type === "challenge" && !it.practice))) toggleAward(d.id, +d.k); break;
       case "adj": if (S.teams[d.id]) { S.manual[d.id] = (S.manual[d.id] || 0) + (+d.v || 0); save(); render(); broadcast(); } break;
-      case "play": if (it.audio) playAudio(d.reveal && it.revealAudio ? it.revealAudio : it.audio); break;
-      case "stop": audio.pause(); break;
       case "lock": S.locked = !S.locked; save(); render(); break;
       case "join": showJoin = !showJoin; showRemote = false; render(); break;
     }
@@ -264,7 +263,6 @@
 
   // ---------- Flow ----------
   function enterItem(i) {
-    audio.pause();
     S.idx = Math.max(0, Math.min(ITEMS.length - 1, i));
     const it = item();
     S.openedAt = null; S.pauseEnd = null;
@@ -279,7 +277,6 @@
     if (it.type !== "mc" || S.phase !== "show") return;
     S.answers[S.idx] = {};
     S.phase = "open"; S.openedAt = Date.now();
-    if (it.audio) playAudio(it.audio);
     save(); render(); broadcast();
   }
   function closeQuestion() {
@@ -290,7 +287,6 @@
     if (S.phase !== "closed" && S.phase !== "open") return;
     S.phase = "reveal";
     const it = item();
-    if (it.revealAudio) playAudio(it.revealAudio); else audio.pause();
     save(); render(); broadcast();
   }
   function primary() {
@@ -310,25 +306,6 @@
       S.pauseEnd = Date.now() + (it.minutes || 5) * 60000; save(); render(); broadcast();
     } else enterItem(S.idx + 1);
   }
-
-  // ---------- Audio ----------
-  const audio = new Audio();
-  const localFiles = {};
-  audio.addEventListener("error", () => {
-    if (!audio.src) return;
-    toast("Audiodatei nicht gefunden: " + decodeURIComponent(audio.src.split("/").pop()) + " – in den Ordner audio/ legen oder über 🎵 laden.");
-  });
-  function playAudio(name) {
-    audio.src = localFiles[name] || "audio/" + encodeURIComponent(name);
-    audio.currentTime = 0;
-    audio.play().catch(() => {});
-  }
-  $("bAudioLoad").onclick = () => $("audioFiles").click();
-  $("audioFiles").onchange = e => {
-    for (const f of e.target.files) localFiles[f.name] = URL.createObjectURL(f);
-    toast(e.target.files.length + " Audiodatei(en) geladen: " + Object.keys(localFiles).join(", "));
-    render();
-  };
 
   // ---------- Rendering ----------
   function toast(msg) {
@@ -393,25 +370,29 @@
       const ans = S.answers[S.idx] || {};
       const rev = S.phase === "reveal";
       const who = k => rev ? ids.filter(id => ans[id] && ans[id].choice === k).map(id => `<span>${esc(teamName(id))}</span>`).join("") : "";
-      let html = it.img ? `<div class="qimg ${S.phase === "show" ? "" : "small"}"><img src="${esc(it.img)}" alt=""></div>` : "";
+      // Leiste oben: Teams, die noch nicht geantwortet haben (ohne zu verraten, was sie gewählt haben)
+      let html = "";
+      if (S.phase === "open" || S.phase === "closed") {
+        const pend = ids.filter(id => !ans[id]);
+        html += `<div class="waitbar">${S.phase === "closed" && pend.length ? `<span class="muted">⏱ Zeit abgelaufen</span>`
+          : pend.length ? `<span class="muted">Noch nicht geantwortet:</span>${pend.map(id => `<span class="chip">${esc(teamName(id))}</span>`).join("")}`
+          : `<span class="muted">✅ Alle Teams haben geantwortet</span>`}</div>`;
+      }
+      html += it.img ? `<div class="qimg ${S.phase === "show" ? "" : "small"}"><img src="${esc(it.img)}" alt=""></div>` : "";
       html += `<div class="category">${esc(it.category || "")}${it.multiplier ? ` · ×${it.multiplier}` : ""}</div>
         <div class="question">${esc(it.q)}</div>`;
       if (S.phase === "show") {
-        primaryLabel = `▶ Start (${Q.answerSeconds} s)${it.audio ? " + Audio" : ""}`;
-        html += it.audio ? `<div class="controls"><button id="bPlay">🔊 Audio testen</button><button id="bStop">⏹</button><span class="muted small">${esc(it.audio)}${localFiles[it.audio] ? " ✓ geladen" : ""}</span></div>` : "";
+        primaryLabel = `▶ Start (${Q.answerSeconds} s)`;
         html += `<p class="muted">Antworten werden nach dem Start eingeblendet.</p>`;
       } else {
         html += `<div class="answers">${it.a.map((t, k) =>
           `<div class="answer c${LETTERS[k]} ${rev ? (k === it.correct ? "correct" : "dim") : ""}"><span class="letter">${LETTERS[k]}</span><span>${esc(t)}</span><span class="who">${who(k)}</span></div>`).join("")}</div>`;
         if (S.phase === "open" || S.phase === "closed") {
           primaryLabel = "Auflösen";
-          html += `<div class="timer"><span class="big" id="tbig"></span><div class="bar"><div id="tbar"></div></div><span class="pts" id="tpts"></span></div>
-            <div class="status">${ids.map(id => `<span class="chip ${ans[id] ? "done" : ""} ${conns.has(id) ? "" : "off"}">${ans[id] ? "✓ " : ""}${esc(teamName(id))}</span>`).join("")}</div>
-            ${it.audio ? `<div class="controls"><button id="bPlay">🔊 nochmal</button><button id="bStop">⏹</button></div>` : ""}`;
+          html += `<div class="timer"><span class="big" id="tbig"></span><div class="bar"><div id="tbar"></div></div><span class="pts" id="tpts"></span></div>`;
         } else {
           primaryLabel = "Weiter ▶";
           if (it.explain) html += `<div class="explain">${esc(it.explain)}</div>`;
-          html += `${it.revealAudio || it.audio ? `<div class="controls"><button id="bPlayRev">🔊 Audio</button><button id="bStop">⏹</button></div>` : ""}`;
         }
       }
       st.innerHTML = html;
@@ -429,7 +410,7 @@
       if (S.phase === "show") {
         primaryLabel = "▶ Los! (3-2-1)";
         html += `<p class="bigtext">${esc(it.text)}</p>
-          <p class="bigtext">👉 Jetzt auf dem Team-Handy <b>„${it.color ? "Sensoren & Kamera" : "Sensoren"} freigeben“</b> antippen${it.color ? " und beide Abfragen erlauben" : ""}.</p>
+          <p class="bigtext">👉 Jetzt auf dem Team-Handy <b>„${it.color || it.cameraCheck ? "Sensoren & Kamera" : "Sensoren"} freigeben“</b> antippen${it.color || it.cameraCheck ? " und beide Abfragen erlauben" : ""}.</p>
           <div class="status">${ids.map(id => { const x = c[id]; return `<span class="chip ${x && x.ready ? "done" : ""}">${x && x.ready ? "✓ " : x && x.mode === "none" ? "⚠ Sensoren: " : x && x.mode === "motion" && !x.cam ? "⚠ Kamera: " : "… "}${esc(teamName(id))}</span>`; }).join("")}</div>
           <p class="muted">✓ = bereit · … = noch nicht freigegeben · ⚠ = Handy liefert keine Sensordaten → anderes Handy nehmen</p>`;
       } else {
@@ -442,7 +423,7 @@
         else {
           primaryLabel = "Weiter ▶";
           html += it.practice
-            ? `<div class="bigtext">${ids.map(id => (c[id] && c[id].stage === "done" ? "✅ " : "❌ ") + esc(teamName(id))).join(" &nbsp; ")}</div>${ids.every(id => c[id] && c[id].stage === "done") ? `<p class="bigtext">Alle Handys funktionieren – es kann losgehen!</p>` : `<p class="bigtext">Bei ❌: Handy wechseln oder Testrunde wiederholen (⚙︎ → Aktuelle Frage zurücksetzen).</p>`}`
+            ? `<div class="bigtext">${ids.map(id => (c[id] && c[id].stage === "done" ? "✅ " : "❌ ") + esc(teamName(id))).join(" &nbsp; ")}</div>${ids.every(id => c[id] && c[id].stage === "done") ? `<p class="bigtext">Bewegung klappt bei allen${it.cameraCheck ? " – seht ihr auch das Kamerabild auf dem Handy?" : "!"}</p>` : `<p class="bigtext">Bei ❌: Handy wechseln oder Testrunde wiederholen (⚙︎ → Aktuelle Frage zurücksetzen).</p>`}`
             : `<div class="bigtext">${a.filter(Boolean).map((id, k) => `${["🥇", "🥈"][k] || ""} ${esc(teamName(id))}`).join(" &nbsp; ") || "Niemand hat es geschafft."}</div>`;
         }
       }
@@ -475,9 +456,6 @@
     st.classList.remove("anim-item", "anim-answers", "anim-reveal");
     if (render.anim && Date.now() - render.animAt < 900) { void st.offsetWidth; st.classList.add("anim-" + render.anim); }
     const bp = $("bPrimary"); if (bp) bp.onclick = primary;
-    const pl = $("bPlay"); if (pl) pl.onclick = () => playAudio(it.audio);
-    const pr = $("bPlayRev"); if (pr) pr.onclick = () => playAudio(it.revealAudio || it.audio);
-    const sp = $("bStop"); if (sp) sp.onclick = () => audio.pause();
 
     renderScore();
     renderNotes();
@@ -526,6 +504,7 @@
   function renderNotes() {
     const it = item();
     $("notes").classList.toggle("hidden", !showNotes);
+    $("side").classList.toggle("notesopen", showNotes);
     if (!showNotes) return;
     let h = `<b>Notiz:</b> ${esc(it.note || "–")}`;
     if (it.type === "mc") h += `<br><b>Lösung:</b> ${LETTERS[it.correct]} – ${esc(it.a[it.correct])}`;
@@ -585,6 +564,8 @@
   }
   setInterval(mirror, 200);
   startDisplayPeer();
+  // Beim Neuladen/Schließen IDs sofort freigeben, damit Tablet & Teams direkt wieder verbinden können
+  window.addEventListener("pagehide", () => { try { displayPeer && displayPeer.destroy(); } catch {} try { peer && peer.destroy(); } catch {} });
   setInterval(() => sendRemotes(), item().type === "challenge" ? 1000 : 3000);
   setInterval(() => { if (item().type === "challenge" && S.phase === "open") sendRemotes(); }, 1000);
 
@@ -597,7 +578,7 @@
   $("bAdmin").onclick = () => { admin = !admin; render(); };
   $("bResetItem").onclick = () => {
     if (!confirm("Antworten/Punkte der aktuellen Frage löschen und Frage neu starten?")) return;
-    delete S.answers[S.idx]; delete S.awards[S.idx]; delete S.chal[S.idx]; S.phase = "show"; S.openedAt = null; S.pauseEnd = null; audio.pause();
+    delete S.answers[S.idx]; delete S.awards[S.idx]; delete S.chal[S.idx]; S.phase = "show"; S.openedAt = null; S.pauseEnd = null;
     save(); render(); broadcast();
   };
   $("bResetScores").onclick = () => {

@@ -210,8 +210,8 @@
       C.mode = got ? "motion" : null;
     } else C.mode = null;
     C.failed = !C.mode;
-    C.cam = st && st.color ? await startCamera() : false;
-    C.camFailed = !!(st && st.color && !C.cam);
+    C.cam = st && st.needCam ? await startCamera() : false;
+    C.camFailed = !!(st && st.needCam && !C.cam);
     if (conn && conn.open && st) conn.send({ t: "ready", idx: st.idx, mode: C.mode || "none", cam: camLive() });
     render();
   }
@@ -267,7 +267,7 @@
     const el = $("chal"); if (!el || !st) return;
     const now = performance.now();
     let h;
-    if ((st.done || C.stage === "done") && st.practice) h = `<div class="huge" style="color:var(--ok)">✅ Test bestanden!</div><p>Euer Handy funktioniert. Wartet auf die anderen.</p>`;
+    if ((st.done || C.stage === "done") && st.practice) h = `<div class="huge" style="color:var(--ok)">✅ Bewegung ok!</div>${st.cameraCheck ? "<p><b>📷 Seht ihr unten das Kamerabild?</b> Sagt dem Moderator Bescheid!</p>" : "<p>Euer Handy funktioniert. Wartet auf die anderen.</p>"}`;
     else if (st.done || C.stage === "done") h = `<div class="huge" style="color:var(--ok)">✅ Geschafft!</div>${st.place ? `<p class="huge">${st.place}. Platz</p>` : "<p>Warte auf die anderen …</p>"}`;
     else if (!C.goAt || now < C.goAt) h = `<div class="huge" style="font-size:6rem">${C.goAt ? Math.ceil((C.goAt - now) / 1000) : "…"}</div><p>Gleich geht's los – Handy gut festhalten!</p>`;
     else if (C.stage === "shake") {
@@ -289,22 +289,24 @@
     el.innerHTML = h;
     const cw = $("camwrap");
     if (cw) {
-      const show = C.stage === "color" && !st.done && C.stage !== "done";
+      const preview = st.cameraCheck && st.practice && (st.done || C.stage === "done");
+      const show = preview || (C.stage === "color" && !st.done);
       cw.classList.toggle("hidden", !show);
       if (show && C.video && C.video.parentNode !== cw) { cw.prepend(C.video); C.video.play().catch(() => {}); }
-      const ring = cw.querySelector(".ring"); if (ring) ring.classList.toggle("hit", (C.frac || 0) >= HIT_FRACTION);
+      const ring = cw.querySelector(".ring"); if (ring) { ring.style.display = preview ? "none" : ""; ring.classList.toggle("hit", (C.frac || 0) >= HIT_FRACTION); }
     }
   }
 
   // ---------- Anzeige ----------
-  let lastViewKey = "", animAt = 0;
+  let lastIdx = null, lastPhase = null;
   function render() {
     if (!st) return;
-    const vk = st.idx + "|" + st.phase;
-    if (vk !== lastViewKey) { lastViewKey = vk; animAt = performance.now(); }
+    // Einblenden nur bei neuer Folie oder neuem Abschnitt – nicht beim Antworten / wenn die Zeit abläuft
+    const animate = st.idx !== lastIdx || (st.phase !== lastPhase && st.phase !== "closed");
+    lastIdx = st.idx; lastPhase = st.phase;
     const vEl = $("view");
     vEl.classList.remove("fresh");
-    if (performance.now() - animAt < 800) { void vEl.offsetWidth; vEl.classList.add("fresh"); }
+    if (animate) { void vEl.offsetWidth; vEl.classList.add("fresh"); }
     $("team").textContent = st.name;
     $("sc").textContent = st.score != null ? `${st.score} P · ${st.rank}.` : "";
     $("sc").style.display = st.score != null ? "" : "none";
@@ -333,12 +335,12 @@
           </div>`;
       }
     } else if (st.type === "challenge") {
-      const ready = C.mode && (!st.color || camLive());
+      const ready = C.mode && (!st.needCam || camLive());
       if (st.phase === "show" || !ready) {
         v.innerHTML = `<div class="card"><h1>${esc(st.title)}</h1><p>${esc(st.text)}</p></div>
-          ${ready ? `<div class="card center"><div class="huge" style="color:var(--ok)">✓ Bereit</div><p>${st.color ? "Sensoren und Kamera aktiv" : "Sensoren aktiv"}. Wartet auf den Start!</p></div>`
+          ${ready ? `<div class="card center"><div class="huge" style="color:var(--ok)">✓ Bereit</div><p>${st.needCam ? "Sensoren und Kamera aktiv" : "Sensoren aktiv"}. Wartet auf den Start!</p></div>`
           : `${C.camFailed && !C.failed ? `<div class="card" style="border:2px solid var(--bad)"><b>⚠ Kamera nicht verfügbar.</b><p class="small">Kamera-Abfrage mit „Erlauben“ bestätigen. Falls abgelehnt: Tab schließen, Seite neu öffnen, erneut freigeben. Firmenhandys sperren die Kamera manchmal – dann anderes Handy nehmen.</p></div>` : ""}${C.failed ? `<div class="card" style="border:2px solid var(--bad)"><b>⚠ Keine Bewegungsdaten.</b><p class="small">iPhone: „Erlauben“ antippen. Falls abgelehnt: Safari-Tab schließen, Seite neu öffnen und erneut freigeben. Hilft das nicht: anderes Handy nehmen und dem Moderator Bescheid geben.</p></div>` : ""}
-             <button class="primary bigbtn" id="bSens" style="min-height:auto;padding:1.2rem">📲 ${C.failed || C.camFailed ? "Nochmal versuchen" : st.color ? "Sensoren & Kamera freigeben" : "Sensoren freigeben"}</button><p class="muted center small">${st.color ? "Beide Abfragen (Bewegung und Kamera) mit „Erlauben“ bestätigen." : "Auf dem iPhone mit „Erlauben“ bestätigen."}</p>`}`;
+             <button class="primary bigbtn" id="bSens" style="min-height:auto;padding:1.2rem">📲 ${C.failed || C.camFailed ? "Nochmal versuchen" : st.needCam ? "Sensoren & Kamera freigeben" : "Sensoren freigeben"}</button><p class="muted center small">${st.needCam ? "Beide Abfragen (Bewegung und Kamera) mit „Erlauben“ bestätigen." : "Auf dem iPhone mit „Erlauben“ bestätigen."}</p>`}`;
         const b = $("bSens"); if (b) b.onclick = enableSensors;
       } else if (st.phase === "open" && $("chal")) {
         updateChal(); // nicht neu aufbauen, sonst gehen Tipp-/Halte-Gesten verloren
@@ -346,7 +348,8 @@
         v.innerHTML = `<div class="card center" id="chal"></div><div class="camwrap hidden" id="camwrap"><div class="ring"></div></div>`;
         updateChal();
       } else {
-        v.innerHTML = st.practice ? `<div class="card center"><h1>${esc(st.title)}</h1><p class="huge" style="color:${st.done ? "var(--ok)" : "var(--bad)"}">${st.done ? "✅ Test ok" : "❌ Nicht geschafft"}</p>${st.done ? "" : "<p>Sagt dem Moderator Bescheid – evtl. anderes Handy nehmen.</p>"}</div>` : `<div class="card center"><h1>${esc(st.title)}</h1>${st.place ? `<p class="huge" style="color:var(--ok)">${st.place}. Platz!</p>` : st.done ? "<p>Geschafft – leider nicht unter den ersten zwei.</p>" : "<p>Vorbei!</p>"}</div>`;
+        v.innerHTML = st.practice ? `<div class="card center"><h1>${esc(st.title)}</h1><p class="huge" style="color:${st.done ? "var(--ok)" : "var(--bad)"}">${st.done ? "✅ Bewegung ok" : "❌ Nicht geschafft"}</p>${st.done ? (st.cameraCheck ? "<p><b>📷 Seht ihr das Kamerabild?</b> Sagt dem Moderator Bescheid!</p>" : "") : "<p>Sagt dem Moderator Bescheid – evtl. anderes Handy nehmen.</p>"}</div>${st.cameraCheck && camLive() ? `<div class="camwrap" id="camwrap2"></div>` : ""}` : `<div class="card center"><h1>${esc(st.title)}</h1>${st.place ? `<p class="huge" style="color:var(--ok)">${st.place}. Platz!</p>` : st.done ? "<p>Geschafft – leider nicht unter den ersten zwei.</p>" : "<p>Vorbei!</p>"}</div>`;
+        const cw2 = $("camwrap2"); if (cw2 && C.video) { cw2.appendChild(C.video); C.video.play().catch(() => {}); }
       }
     } else if (st.type === "interactive") {
       v.innerHTML = `<div class="card"><h1>${esc(st.title)}</h1><p>${esc(st.text)}</p>
