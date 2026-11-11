@@ -138,3 +138,30 @@ button.big { font-size: 1.9rem; font-weight: 700; padding: .75em 3em; border-rad
 .chold { background: linear-gradient(90deg, #3b8cff, #2fbf71); }
 .clabel { font-variant-numeric: tabular-nums; }
 .bigbtn { width: 100%; min-height: 42vh; font-size: 2rem; font-weight: 800; border-radius: 20px; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+
+/* ---------- Sanfte Übergänge ---------- */
+@keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes dimOut { from { opacity: 1; } to { opacity: .25; } }
+@keyframes pop { 0% { transform: scale(1); } 60% { transform: scale(1.06); } 100% { transform: scale(1.03); } }
+.stage.anim-item > * { animation: fadeUp .55s cubic-bezier(.2, .7, .2, 1) both; }
+.stage.anim-item > *:nth-child(2) { animation-delay: .07s; }
+.stage.anim-item > *:nth-child(3) { animation-delay: .14s; }
+.stage.anim-item > *:nth-child(4) { animation-delay: .21s; }
+.stage.anim-item > *:nth-child(n+5) { animation-delay: .28s; }
+.stage.anim-answers .answer, .stage.anim-answers .crow { animation: fadeUp .5s cubic-bezier(.2, .7, .2, 1) both; }
+.stage.anim-answers .answer:nth-child(2), .stage.anim-answers .crow:nth-child(2) { animation-delay: .09s; }
+.stage.anim-answers .answer:nth-child(3), .stage.anim-answers .crow:nth-child(3) { animation-delay: .18s; }
+.stage.anim-answers .answer:nth-child(4), .stage.anim-answers .crow:nth-child(4) { animation-delay: .27s; }
+.stage.anim-answers .crow:nth-child(5) { animation-delay: .36s; }
+.stage.anim-answers .timer, .stage.anim-answers .status, .stage.anim-answers .nextbar { animation: fadeIn .6s .3s both; }
+.stage.anim-reveal .answer.dim { animation: dimOut .6s ease both; }
+.stage.anim-reveal .answer.correct { animation: pop .6s cubic-bezier(.2, .7, .2, 1) both; }
+.stage.anim-reveal .explain, .stage.anim-reveal .bigtext { animation: fadeUp .5s .25s cubic-bezier(.2, .7, .2, 1) both; }
+.stage.anim-reveal .nextbar { animation: fadeIn .5s .4s both; }
+#view.fresh > * { animation: fadeUp .45s cubic-bezier(.2, .7, .2, 1) both; }
+#view.fresh .pbtn { animation: fadeUp .45s cubic-bezier(.2, .7, .2, 1) both; }
+#view.fresh .pbtn:nth-child(2) { animation-delay: .07s; }
+#view.fresh .pbtn:nth-child(3) { animation-delay: .14s; }
+#view.fresh .pbtn:nth-child(4) { animation-delay: .21s; }
+@media (prefers-reduced-motion: reduce) { .stage *, #view * { animation: none !important; } }

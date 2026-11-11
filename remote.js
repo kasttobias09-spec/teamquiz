@@ -88,7 +88,7 @@
       if (it.type === "mc" && st.phase !== "show") {
         mid = t.answer ? `<span class="${t.answer.choice === it.correct ? "sol" : ""}">${LETTERS[t.answer.choice]} · ${(t.answer.el / 1000).toFixed(1)}s · ${t.answer.points > 0 ? "+" : ""}${t.answer.points}</span>` : `<span class="muted">–</span>`;
       } else if (it.type === "challenge") {
-        mid = `<span class="muted">${esc(t.chal || "")}</span>` + st.interactivePoints.map((p, k) => `<button data-award="${t.id}" data-k="${k}" class="${st.awards[k] === t.id ? "sel" : ""}">${k + 1}.</button>`).join("");
+        mid = `<span class="muted">${esc(t.chal || "")}</span>` + (it.practice ? "" : st.interactivePoints.map((p, k) => `<button data-award="${t.id}" data-k="${k}" class="${st.awards[k] === t.id ? "sel" : ""}">${k + 1}.</button>`).join(""));
       } else if (it.type === "interactive") {
         mid = st.interactivePoints.map((p, k) => `<button data-award="${t.id}" data-k="${k}" class="${st.awards[k] === t.id ? "sel" : ""}">${k + 1}. (+${p})</button>`).join("");
       }

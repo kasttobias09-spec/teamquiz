@@ -158,6 +158,7 @@
       const a = S.awards[S.idx] || []; const k = a.indexOf(id); v.place = k >= 0 ? k + 1 : null;
     } else if (it.type === "challenge") {
       v.title = it.title; v.text = it.text; v.shakes = it.shakes; v.holdSeconds = it.holdSeconds;
+      v.stillMax = it.stillMax || 0.6; v.practice = !!it.practice;
       if (S.phase === "open") v.goInMs = Math.max(0, S.openedAt + GO_DELAY - Date.now());
       const x = chalOf()[id]; v.done = !!(x && x.stage === "done"); v.ready = !!(x && x.ready);
       const a = S.awards[S.idx] || []; const k = a.indexOf(id); v.place = k >= 0 ? k + 1 : null;
@@ -184,9 +185,9 @@
     if (S.phase !== "open" || Date.now() < S.openedAt + GO_DELAY - 300 || me.stage === "done") return;
     if (d.stage === "done") {
       me.stage = "done"; me.value = 0;
-      const a = (S.awards[S.idx] = S.awards[S.idx] || []);
       me.place = Object.values(c).filter(x => x.stage === "done").length;
-      if (!a.includes(id)) for (let k = 0; k < Q.interactivePoints.length; k++) if (!a[k]) { a[k] = id; break; }
+      const a = it.practice ? [] : (S.awards[S.idx] = S.awards[S.idx] || []);
+      if (!it.practice && !a.includes(id)) for (let k = 0; k < Q.interactivePoints.length; k++) if (!a[k]) { a[k] = id; break; }
       save(); render(); broadcast();
       return;
     }
@@ -197,6 +198,7 @@
     if (!x || x.stage === "wait") return "bereit…";
     if (x.stage === "shake") return `📳 ${x.value}/${it.shakes}`;
     if (x.stage === "hold") return `🫗 ${(x.value / 1000).toFixed(1)} / ${it.holdSeconds} s`;
+    if (it.practice) return "✓ Test ok";
     return (["🥇", "🥈", "🥉"][x.place - 1] || x.place + ".") + " geschafft!";
   }
   function updateBars() {
@@ -219,7 +221,7 @@
     return {
       t: "rstate", idx: S.idx, total: ITEMS.length, phase: S.phase, code: S.code, locked: S.locked,
       item: { type: it.type, category: it.category, q: it.q, a: it.a, correct: it.correct, explain: it.explain, note: it.note,
-        title: it.title, text: it.text, audio: it.audio, revealAudio: it.revealAudio, img: it.img, multiplier: it.multiplier, minutes: it.minutes },
+        title: it.title, text: it.text, audio: it.audio, revealAudio: it.revealAudio, img: it.img, multiplier: it.multiplier, minutes: it.minutes, practice: !!it.practice },
       next: ITEMS[S.idx + 1] ? { type: ITEMS[S.idx + 1].type, title: ITEMS[S.idx + 1].title, q: ITEMS[S.idx + 1].q, note: ITEMS[S.idx + 1].note } : null,
       ansMs: ANS_MS,
       remainingMs: S.phase === "open" ? Math.max(0, ANS_MS - (Date.now() - S.openedAt)) : null,
@@ -244,7 +246,7 @@
       case "prev": enterItem(S.idx - 1); break;
       case "next": enterItem(S.idx + 1); break;
       case "primary": primary(); break;
-      case "award": if (S.teams[d.id] && (it.type === "interactive" || it.type === "challenge")) toggleAward(d.id, +d.k); break;
+      case "award": if (S.teams[d.id] && (it.type === "interactive" || (it.type === "challenge" && !it.practice))) toggleAward(d.id, +d.k); break;
       case "adj": if (S.teams[d.id]) { S.manual[d.id] = (S.manual[d.id] || 0) + (+d.v || 0); save(); render(); broadcast(); } break;
       case "play": if (it.audio) playAudio(d.reveal && it.revealAudio ? it.revealAudio : it.audio); break;
       case "stop": audio.pause(); break;
@@ -416,7 +418,7 @@
     } else if (it.type === "challenge") {
       const c = chalOf();
       const a = S.awards[S.idx] || [];
-      let html = `<div class="category">Handy-Challenge</div><div class="bigtitle">${esc(it.title)}</div>`;
+      let html = `<div class="category">${it.practice ? "Testrunde · keine Punkte" : "Handy-Challenge"}</div><div class="bigtitle">${esc(it.title)}</div>`;
       if (S.phase === "show") {
         primaryLabel = "▶ Los! (3-2-1)";
         html += `<p class="bigtext">${esc(it.text)}</p>
@@ -432,7 +434,9 @@
         if (S.phase === "open") primaryLabel = "Beenden";
         else {
           primaryLabel = "Weiter ▶";
-          html += `<div class="bigtext">${a.filter(Boolean).map((id, k) => `${["🥇", "🥈"][k] || ""} ${esc(teamName(id))}`).join(" &nbsp; ") || "Niemand hat es geschafft."}</div>`;
+          html += it.practice
+            ? `<div class="bigtext">${ids.map(id => (c[id] && c[id].stage === "done" ? "✅ " : "❌ ") + esc(teamName(id))).join(" &nbsp; ")}</div>${ids.every(id => c[id] && c[id].stage === "done") ? `<p class="bigtext">Alle Handys funktionieren – es kann losgehen!</p>` : `<p class="bigtext">Bei ❌: Handy wechseln oder Testrunde wiederholen (⚙︎ → Aktuelle Frage zurücksetzen).</p>`}`
+            : `<div class="bigtext">${a.filter(Boolean).map((id, k) => `${["🥇", "🥈"][k] || ""} ${esc(teamName(id))}`).join(" &nbsp; ") || "Niemand hat es geschafft."}</div>`;
         }
       }
       st.innerHTML = html;
@@ -452,7 +456,17 @@
     }
     if (primaryLabel) st.insertAdjacentHTML("beforeend", `<div class="nextbar"><button class="primary big" id="bPrimary">${esc(primaryLabel)}</button></div>`);
     const viewKey = S.idx + "|" + S.phase + "|" + showJoin + "|" + showRemote;
-    if (viewKey !== render.lastKey) { st.scrollTop = 0; render.lastKey = viewKey; }
+    if (viewKey !== render.lastKey) {
+      // Art des Übergangs bestimmen: neue Folie / Antworten erscheinen / Auflösung
+      let kind = "item";
+      if (render.lastIdx === S.idx && !showJoin && !showRemote) kind = S.phase === "reveal" ? "reveal" : (S.phase === "open" ? "answers" : "item");
+      if (render.lastIdx === S.idx && it.type === "mc" && S.phase === "closed") kind = "";
+      if (render.lastIdx === S.idx && it.type === "challenge" && S.phase === "open") kind = "answers";
+      st.scrollTop = 0; render.lastKey = viewKey; render.lastIdx = S.idx;
+      render.anim = kind; render.animAt = Date.now();
+    }
+    st.classList.remove("anim-item", "anim-answers", "anim-reveal");
+    if (render.anim && Date.now() - render.animAt < 900) { void st.offsetWidth; st.classList.add("anim-" + render.anim); }
     const bp = $("bPrimary"); if (bp) bp.onclick = primary;
     const pl = $("bPlay"); if (pl) pl.onclick = () => playAudio(it.audio);
     const pr = $("bPlayRev"); if (pr) pr.onclick = () => playAudio(it.revealAudio || it.audio);
@@ -547,12 +561,12 @@
   $("bAdmin").onclick = () => { admin = !admin; render(); };
   $("bResetItem").onclick = () => {
     if (!confirm("Antworten/Punkte der aktuellen Frage löschen und Frage neu starten?")) return;
-    delete S.answers[S.idx]; delete S.awards[S.idx]; S.phase = "show"; S.openedAt = null; S.pauseEnd = null; audio.pause();
+    delete S.answers[S.idx]; delete S.awards[S.idx]; delete S.chal[S.idx]; S.phase = "show"; S.openedAt = null; S.pauseEnd = null; audio.pause();
     save(); render(); broadcast();
   };
   $("bResetScores").onclick = () => {
     if (!confirm("Alle Punkte löschen? Teams bleiben verbunden.")) return;
-    S.answers = {}; S.awards = {}; S.manual = {}; enterItem(0);
+    S.answers = {}; S.awards = {}; S.manual = {}; S.chal = {}; enterItem(0);
   };
   $("bResetAll").onclick = () => {
     if (!confirm("Komplett neu starten? Alle Teams müssen sich mit neuem Code neu anmelden.")) return;

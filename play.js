@@ -142,7 +142,7 @@
 
   // ---------- Handy-Challenge (Schütteln + ruhig halten) ----------
   const SHAKE_HI = 14, SHAKE_LO = 6;   // m/s² ohne Schwerkraft
-  const STILL_MAX = 1.6;               // darüber = gewackelt
+  const STILL_DEFAULT = 0.6;          // darüber = gewackelt (m/s²), pro Challenge über stillMax einstellbar
   const C = { mode: null, listening: false, idx: null, stage: "wait", count: 0, holdStart: null, holdMs: 0, armed: true, wobbleAt: 0, flat: true, lastSent: 0, sentKey: "" };
 
   async function enableSensors() {
@@ -174,7 +174,7 @@
     if (a && a.x != null) mag = Math.hypot(a.x, a.y, a.z);
     else if (g.x != null) mag = Math.abs(Math.hypot(g.x, g.y, g.z) - 9.81);
     else return;
-    C.flat = g.z != null ? Math.abs(g.z) > 8.0 : true;
+    C.flat = g.z != null ? Math.abs(g.z) > 8.8 : true; // max. ca. 25° gekippt
     if (!chalRunning() || C.mode !== "motion") return;
     const now = performance.now();
     if (C.stage === "shake") {
@@ -182,7 +182,7 @@
       else if (mag < SHAKE_LO) C.armed = true;
       if (C.count >= st.shakes) { C.stage = "hold"; C.holdStart = null; C.holdMs = 0; }
     } else if (C.stage === "hold") {
-      if (mag > STILL_MAX || !C.flat) { if (C.holdMs > 400) C.wobbleAt = now; C.holdStart = null; C.holdMs = 0; }
+      if (mag > (st.stillMax || STILL_DEFAULT) || !C.flat) { if (C.holdMs > 400) C.wobbleAt = now; C.holdStart = null; C.holdMs = 0; }
       else { if (!C.holdStart) C.holdStart = now; C.holdMs = now - C.holdStart; }
       if (C.holdMs >= st.holdSeconds * 1000) finishChallenge();
     }
@@ -209,7 +209,8 @@
     const el = $("chal"); if (!el || !st) return;
     const now = performance.now();
     let h;
-    if (st.done || C.stage === "done") h = `<div class="huge" style="color:var(--ok)">✅ Geschafft!</div>${st.place ? `<p class="huge">${st.place}. Platz</p>` : "<p>Warte auf die anderen …</p>"}`;
+    if ((st.done || C.stage === "done") && st.practice) h = `<div class="huge" style="color:var(--ok)">✅ Test bestanden!</div><p>Euer Handy funktioniert. Wartet auf die anderen.</p>`;
+    else if (st.done || C.stage === "done") h = `<div class="huge" style="color:var(--ok)">✅ Geschafft!</div>${st.place ? `<p class="huge">${st.place}. Platz</p>` : "<p>Warte auf die anderen …</p>"}`;
     else if (!C.goAt || now < C.goAt) h = `<div class="huge" style="font-size:6rem">${C.goAt ? Math.ceil((C.goAt - now) / 1000) : "…"}</div><p>Gleich geht's los – Handy gut festhalten!</p>`;
     else if (C.stage === "shake") {
       const target = st.shakes;
@@ -226,8 +227,14 @@
   }
 
   // ---------- Anzeige ----------
+  let lastViewKey = "", animAt = 0;
   function render() {
     if (!st) return;
+    const vk = st.idx + "|" + st.phase;
+    if (vk !== lastViewKey) { lastViewKey = vk; animAt = performance.now(); }
+    const vEl = $("view");
+    vEl.classList.remove("fresh");
+    if (performance.now() - animAt < 800) { void vEl.offsetWidth; vEl.classList.add("fresh"); }
     $("team").textContent = st.name;
     $("sc").textContent = st.score != null ? `${st.score} P · ${st.rank}.` : "";
     $("sc").style.display = st.score != null ? "" : "none";
@@ -268,7 +275,7 @@
         v.innerHTML = `<div class="card center" id="chal"></div>`;
         updateChal();
       } else {
-        v.innerHTML = `<div class="card center"><h1>${esc(st.title)}</h1>${st.place ? `<p class="huge" style="color:var(--ok)">${st.place}. Platz!</p>` : st.done ? "<p>Geschafft – leider nicht unter den ersten zwei.</p>" : "<p>Vorbei!</p>"}</div>`;
+        v.innerHTML = st.practice ? `<div class="card center"><h1>${esc(st.title)}</h1><p class="huge" style="color:${st.done ? "var(--ok)" : "var(--bad)"}">${st.done ? "✅ Test ok" : "❌ Nicht geschafft"}</p>${st.done ? "" : "<p>Sagt dem Moderator Bescheid – evtl. anderes Handy nehmen.</p>"}</div>` : `<div class="card center"><h1>${esc(st.title)}</h1>${st.place ? `<p class="huge" style="color:var(--ok)">${st.place}. Platz!</p>` : st.done ? "<p>Geschafft – leider nicht unter den ersten zwei.</p>" : "<p>Vorbei!</p>"}</div>`;
       }
     } else if (st.type === "interactive") {
       v.innerHTML = `<div class="card"><h1>${esc(st.title)}</h1><p>${esc(st.text)}</p>
