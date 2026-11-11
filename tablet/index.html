@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#0f1424">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<base href="../">
+<title>Team-Quiz · Anzeige</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  html, body { height: 100%; overflow: hidden; }
+  #stage { height: 100vh; }
+  /* Moderations-Elemente ausblenden */
+  #stage .nextbar, #stage .controls, #stage .award { display: none !important; }
+  #wait { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 1rem; text-align: center; padding: 2rem; }
+  #fs { position: fixed; right: 10px; bottom: 10px; opacity: .35; font-size: .9rem; }
+  /* Tablet ist schmaler als der Beamer: Schriften an die Breite koppeln, aber nicht zu klein */
+  @media (max-width: 1300px) {
+    .question { font-size: max(1.5rem, 3.2vw); } .answer { font-size: max(1.05rem, 2vw); }
+    .bigtitle { font-size: max(2rem, 4.5vw); } .bigtext { font-size: max(1.1rem, 2.2vw); }
+    .category { font-size: max(.9rem, 1.6vw); } .explain { font-size: max(1rem, 1.8vw); }
+    .crow { grid-template-columns: 140px 1fr 150px; font-size: max(1rem, 1.8vw); }
+    .podium li { font-size: max(1.2rem, 2.6vw); }
+  }
+</style>
+</head>
+<body>
+<div class="stage" id="stage"></div>
+<div id="wait"><div class="bigtitle">📺 Anzeige</div><p class="muted" id="status">Verbinde mit dem Quiz …</p><p class="muted small">Die Moderationsseite muss auf dem Laptop geöffnet sein.</p></div>
+<button id="fs">⛶ Vollbild</button>
+<script src="vendor/peerjs.min.js"></script>
+<script src="common.js"></script>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  let peer = null, conn = null, lastAnimAt = 0, animUntil = 0, retryT = null;
+  function status(t) { $("status").textContent = t; }
+  function retry() { clearTimeout(retryT); retryT = setTimeout(connect, 3000); }
+  function connect() {
+    if (conn && conn.open) return;
+    if (!peer || peer.destroyed) {
+      peer = new Peer(TQ.peerOptions);
+      peer.on("open", openConn);
+      peer.on("disconnected", () => setTimeout(() => { if (!peer.destroyed && peer.disconnected) peer.reconnect(); }, 1500));
+      peer.on("error", e => { status(e.type === "peer-unavailable" ? "Moderationsseite nicht gefunden – ist sie auf dem Laptop offen?" : "Verbindungsfehler: " + e.type); retry(); });
+    } else if (peer.open) openConn(); else if (peer.disconnected) peer.reconnect();
+  }
+  function openConn() {
+    if (conn) { try { conn.close(); } catch {} }
+    const c = peer.connect(TQ.PEER_PREFIX + "display", { reliable: true });
+    conn = c;
+    const t = setTimeout(() => { if (!c.open) { try { c.close(); } catch {} retry(); } }, 10000);
+    c.on("open", () => { clearTimeout(t); status("Verbunden – warte auf Inhalt …"); });
+    c.on("data", d => {
+      if (!d || d.t !== "mirror") return;
+      $("wait").style.display = "none";
+      const st = $("stage"), now = performance.now();
+      const fresh = d.animAt !== lastAnimAt;
+      // Während einer Einblend-Animation nicht neu aufbauen (sonst ruckelt sie)
+      if (!fresh && now < animUntil) { pending = d; return; }
+      apply(d, fresh);
+    });
+    c.on("close", () => { if (conn === c) { $("wait").style.display = ""; status("Verbindung getrennt – verbinde neu …"); retry(); } });
+    c.on("error", retry);
+  }
+  let pending = null;
+  function apply(d, fresh) {
+    const st = $("stage");
+    st.innerHTML = d.html;
+    st.classList.remove("anim-item", "anim-answers", "anim-reveal");
+    if (fresh) {
+      lastAnimAt = d.animAt;
+      if (d.anim) { void st.offsetWidth; st.classList.add("anim-" + d.anim); animUntil = performance.now() + 900; }
+      st.scrollTop = 0;
+    }
+    pending = null;
+  }
+  setInterval(() => { if (pending && performance.now() >= animUntil) apply(pending, false); }, 100);
+  $("fs").onclick = () => { const el = document.documentElement; (el.requestFullscreen || el.webkitRequestFullscreen || (() => {})).call(el); };
+  async function wake() { try { if (navigator.wakeLock && document.visibilityState === "visible") await navigator.wakeLock.request("screen"); } catch {} }
+  document.addEventListener("visibilitychange", () => { wake(); if (document.visibilityState === "visible") connect(); });
+  wake();
+  connect();
+})();
+</script>
+</body>
+</html>

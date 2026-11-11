@@ -123,9 +123,10 @@
         if (C.idx !== d.idx) { C.idx = d.idx; C.stage = "wait"; C.count = 0; C.holdMs = 0; C.holdStart = null; C.goAt = null; }
         if (d.phase === "open" && !C.goAt) { C.goAt = performance.now() + (d.goInMs || 0); C.stage = d.done ? "done" : "shake"; C.count = 0; C.holdMs = 0; }
         if (d.phase === "show") { C.goAt = null; C.stage = "wait"; C.count = 0; }
-        if (C.mode && !d.ready && conn && conn.open) conn.send({ t: "ready", idx: d.idx, mode: C.mode });
+        if (C.mode && !d.ready && conn && conn.open) conn.send({ t: "ready", idx: d.idx, mode: C.mode, cam: camLive() });
         if (C.mode && !C.listening) { window.addEventListener("devicemotion", onMotion); C.listening = true; }
       }
+      if (d.type !== "challenge" && C.stream) stopCamera();
       st = d;
       render();
     }
@@ -144,6 +145,51 @@
   const SHAKE_HI = 14, SHAKE_LO = 6;   // m/s² ohne Schwerkraft
   const STILL_DEFAULT = 0.6;          // darüber = gewackelt (m/s²), pro Challenge über stillMax einstellbar
   const C = { mode: null, listening: false, idx: null, stage: "wait", count: 0, holdStart: null, holdMs: 0, armed: true, wobbleAt: 0, flat: true, lastSent: 0, sentKey: "" };
+
+  // Farbjagd: Farbbereiche (Hue in Grad), Sättigung/Helligkeit müssen deutlich sein
+  const COLORS = {
+    rot:   { word: "ROTES",  css: "#ff3b3b", hue: h => h <= 14 || h >= 340, minS: .5, minV: .3 },
+    blau:  { word: "BLAUES", css: "#3b8cff", hue: h => h >= 190 && h <= 255, minS: .4, minV: .25 },
+    gruen: { word: "GRÜNES", css: "#2fbf71", hue: h => h >= 75 && h <= 165, minS: .35, minV: .25 },
+    gelb:  { word: "GELBES", css: "#ffd21f", hue: h => h >= 42 && h <= 68, minS: .45, minV: .5 }
+  };
+  const HIT_FRACTION = .55; // so viel vom Kreis muss die Farbe haben
+  const cv = document.createElement("canvas"); cv.width = cv.height = 32;
+  const cx = cv.getContext("2d", { willReadFrequently: true });
+  function camLive() { return !!(C.stream && C.stream.getVideoTracks().some(t => t.readyState === "live")); }
+  async function startCamera() {
+    if (camLive()) return true;
+    try {
+      C.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 640 }, height: { ideal: 480 } }, audio: false });
+      if (!C.video) {
+        C.video = document.createElement("video");
+        C.video.setAttribute("playsinline", ""); C.video.muted = true; C.video.autoplay = true;
+      }
+      C.video.srcObject = C.stream;
+      C.video.play().catch(() => {});
+      return true;
+    } catch { C.stream = null; return false; }
+  }
+  function stopCamera() { if (C.stream) { C.stream.getTracks().forEach(t => t.stop()); C.stream = null; } }
+  function colorFraction(col) {
+    const v = C.video; if (!v || v.readyState < 2 || !v.videoWidth) return 0;
+    const vw = v.videoWidth, vh = v.videoHeight, side = Math.min(vw, vh) * .4;
+    cx.drawImage(v, (vw - side) / 2, (vh - side) / 2, side, side, 0, 0, 32, 32);
+    const d = cx.getImageData(0, 0, 32, 32).data;
+    let hit = 0, n = 0;
+    for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
+      const dx = x - 15.5, dy = y - 15.5; if (dx * dx + dy * dy > 256) continue;
+      const i = (y * 32 + x) * 4, r = d[i] / 255, g = d[i + 1] / 255, b = d[i + 2] / 255;
+      const mx = Math.max(r, g, b), mn = Math.min(r, g, b), dl = mx - mn;
+      let h = 0;
+      if (dl) h = mx === r ? 60 * (((g - b) / dl) % 6) : mx === g ? 60 * ((b - r) / dl + 2) : 60 * ((r - g) / dl + 4);
+      if (h < 0) h += 360;
+      const sat = mx ? dl / mx : 0;
+      n++;
+      if (sat >= col.minS && mx >= col.minV && col.hue(h)) hit++;
+    }
+    return n ? hit / n : 0;
+  }
 
   async function enableSensors() {
     let ok = false;
@@ -164,7 +210,9 @@
       C.mode = got ? "motion" : null;
     } else C.mode = null;
     C.failed = !C.mode;
-    if (conn && conn.open && st) conn.send({ t: "ready", idx: st.idx, mode: C.mode || "none" });
+    C.cam = st && st.color ? await startCamera() : false;
+    C.camFailed = !!(st && st.color && !C.cam);
+    if (conn && conn.open && st) conn.send({ t: "ready", idx: st.idx, mode: C.mode || "none", cam: camLive() });
     render();
   }
   function chalRunning() { return st && st.type === "challenge" && st.phase === "open" && !st.done && C.idx === st.idx && C.goAt && performance.now() >= C.goAt && C.stage !== "done"; }
@@ -184,7 +232,10 @@
     } else if (C.stage === "hold") {
       if (mag > (st.stillMax || STILL_DEFAULT) || !C.flat) { if (C.holdMs > 400) C.wobbleAt = now; C.holdStart = null; C.holdMs = 0; }
       else { if (!C.holdStart) C.holdStart = now; C.holdMs = now - C.holdStart; }
-      if (C.holdMs >= st.holdSeconds * 1000) finishChallenge();
+      if (C.holdMs >= st.holdSeconds * 1000) {
+        if (st.color) { C.stage = "color"; C.colorStart = null; C.colorMs = 0; render(); }
+        else finishChallenge();
+      }
     }
   }
   function finishChallenge() {
@@ -196,8 +247,15 @@
   function chalLoop() {
     if (st && st.type === "challenge") {
       const now = performance.now();
+      if (chalRunning() && C.stage === "color") {
+        const col = COLORS[st.color] || COLORS.rot;
+        C.frac = colorFraction(col);
+        if (C.frac >= HIT_FRACTION) { if (!C.colorStart) C.colorStart = now; C.colorMs = now - C.colorStart; }
+        else { C.colorStart = null; C.colorMs = 0; }
+        if (C.colorMs >= (st.colorSeconds || 2) * 1000) finishChallenge();
+      }
       if (chalRunning() && now - C.lastSent > 250) {
-        const val = C.stage === "shake" ? C.count : Math.round(C.holdMs);
+        const val = C.stage === "shake" ? C.count : C.stage === "color" ? Math.round(C.colorMs) : Math.round(C.holdMs);
         const k = C.stage + val;
         if (k !== C.sentKey) { C.sentKey = k; C.lastSent = now; try { conn.send({ t: "prog", idx: st.idx, stage: C.stage, value: val }); } catch {} }
       }
@@ -216,6 +274,11 @@
       const target = st.shakes;
       h = `<div class="huge">📳 SCHÜTTELN!</div><div class="huge">${C.count} / ${target}</div>
         <div class="pbar" style="height:22px"><div style="width:${Math.min(100, C.count / target * 100)}%;background:var(--warn)"></div></div>`;
+    } else if (C.stage === "color") {
+      const col = COLORS[st.color] || COLORS.rot, need = (st.colorSeconds || 2) * 1000;
+      h = `<div class="huge">🎨 Finde etwas <span style="color:${col.css}">${col.word}</span>!</div>
+        <p>Kamera draufhalten, bis der Kreis grün wird – ${st.colorSeconds || 2} s halten.</p>
+        <div class="pbar" style="height:22px"><div style="width:${Math.min(100, C.colorMs / need * 100)}%;background:${col.css}"></div></div>`;
     } else {
       const wob = now - C.wobbleAt < 1200;
       h = `<div class="huge">🫗 RUHIG HALTEN!</div>
@@ -224,6 +287,13 @@
         <div class="pbar" style="height:22px"><div style="width:${Math.min(100, C.holdMs / (st.holdSeconds * 1000) * 100)}%;background:var(--ok)"></div></div>`;
     }
     el.innerHTML = h;
+    const cw = $("camwrap");
+    if (cw) {
+      const show = C.stage === "color" && !st.done && C.stage !== "done";
+      cw.classList.toggle("hidden", !show);
+      if (show && C.video && C.video.parentNode !== cw) { cw.prepend(C.video); C.video.play().catch(() => {}); }
+      const ring = cw.querySelector(".ring"); if (ring) ring.classList.toggle("hit", (C.frac || 0) >= HIT_FRACTION);
+    }
   }
 
   // ---------- Anzeige ----------
@@ -263,16 +333,17 @@
           </div>`;
       }
     } else if (st.type === "challenge") {
-      if (st.phase === "show" || !C.mode) {
+      const ready = C.mode && (!st.color || camLive());
+      if (st.phase === "show" || !ready) {
         v.innerHTML = `<div class="card"><h1>${esc(st.title)}</h1><p>${esc(st.text)}</p></div>
-          ${C.mode ? `<div class="card center"><div class="huge" style="color:var(--ok)">✓ Bereit</div><p>Sensoren aktiv. Wartet auf den Start!</p></div>`
-          : `${C.failed ? `<div class="card" style="border:2px solid var(--bad)"><b>⚠ Keine Bewegungsdaten.</b><p class="small">iPhone: „Erlauben“ antippen. Falls abgelehnt: Safari-Tab schließen, Seite neu öffnen und erneut freigeben. Hilft das nicht: anderes Handy nehmen und dem Moderator Bescheid geben.</p></div>` : ""}
-             <button class="primary bigbtn" id="bSens" style="min-height:auto;padding:1.2rem">📲 ${C.failed ? "Nochmal versuchen" : "Sensoren freigeben"}</button><p class="muted center small">Auf dem iPhone mit „Erlauben“ bestätigen.</p>`}`;
+          ${ready ? `<div class="card center"><div class="huge" style="color:var(--ok)">✓ Bereit</div><p>${st.color ? "Sensoren und Kamera aktiv" : "Sensoren aktiv"}. Wartet auf den Start!</p></div>`
+          : `${C.camFailed && !C.failed ? `<div class="card" style="border:2px solid var(--bad)"><b>⚠ Kamera nicht verfügbar.</b><p class="small">Kamera-Abfrage mit „Erlauben“ bestätigen. Falls abgelehnt: Tab schließen, Seite neu öffnen, erneut freigeben. Firmenhandys sperren die Kamera manchmal – dann anderes Handy nehmen.</p></div>` : ""}${C.failed ? `<div class="card" style="border:2px solid var(--bad)"><b>⚠ Keine Bewegungsdaten.</b><p class="small">iPhone: „Erlauben“ antippen. Falls abgelehnt: Safari-Tab schließen, Seite neu öffnen und erneut freigeben. Hilft das nicht: anderes Handy nehmen und dem Moderator Bescheid geben.</p></div>` : ""}
+             <button class="primary bigbtn" id="bSens" style="min-height:auto;padding:1.2rem">📲 ${C.failed || C.camFailed ? "Nochmal versuchen" : st.color ? "Sensoren & Kamera freigeben" : "Sensoren freigeben"}</button><p class="muted center small">${st.color ? "Beide Abfragen (Bewegung und Kamera) mit „Erlauben“ bestätigen." : "Auf dem iPhone mit „Erlauben“ bestätigen."}</p>`}`;
         const b = $("bSens"); if (b) b.onclick = enableSensors;
       } else if (st.phase === "open" && $("chal")) {
         updateChal(); // nicht neu aufbauen, sonst gehen Tipp-/Halte-Gesten verloren
       } else if (st.phase === "open") {
-        v.innerHTML = `<div class="card center" id="chal"></div>`;
+        v.innerHTML = `<div class="card center" id="chal"></div><div class="camwrap hidden" id="camwrap"><div class="ring"></div></div>`;
         updateChal();
       } else {
         v.innerHTML = st.practice ? `<div class="card center"><h1>${esc(st.title)}</h1><p class="huge" style="color:${st.done ? "var(--ok)" : "var(--bad)"}">${st.done ? "✅ Test ok" : "❌ Nicht geschafft"}</p>${st.done ? "" : "<p>Sagt dem Moderator Bescheid – evtl. anderes Handy nehmen.</p>"}</div>` : `<div class="card center"><h1>${esc(st.title)}</h1>${st.place ? `<p class="huge" style="color:var(--ok)">${st.place}. Platz!</p>` : st.done ? "<p>Geschafft – leider nicht unter den ersten zwei.</p>" : "<p>Vorbei!</p>"}</div>`;

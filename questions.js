@@ -4,6 +4,7 @@
 //                 optional: img (Bild über der Frage, z.B. "img/pizza.jpg"), audio (Dateiname in /audio), revealAudio, multiplier (z.B. 2 fürs Finale), category
 //   interactive – Aufgabe, Punkte vergibt der Host per Klick (+30 / +15)
 //   challenge   – Handy-Challenge: shakes× schütteln, dann holdSeconds ruhig halten; Platz 1/2 automatisch
+//                 color = Farbjagd-Farbe (rot|blau|gruen|gelb, weglassen = keine Farbjagd), colorSeconds = Haltedauer
 //                 stillMax = Wackel-Empfindlichkeit in m/s² (kleiner = strenger), practice: true = Testrunde ohne Punkte
 //   pause       – Pause mit Countdown (minutes) + Punktestand
 //   standings   – Zwischenstand (Punkte werden NUR bei pause/standings/end angezeigt)
@@ -207,20 +208,24 @@ window.QUIZ = {
       type: "challenge",
       practice: true,
       title: "🧪 Testrunde – funktionieren eure Handys?",
-      text: "Gleich kommt eine Handy-Challenge. Wir testen kurz, ob alles klappt: 10× schütteln, dann 3 Sekunden ruhig und flach halten. Keine Punkte – nur zum Ausprobieren!",
+      text: "Gleich kommt eine Handy-Challenge. Wir testen kurz, ob alles klappt: 10× schütteln, 3 Sekunden ruhig und flach halten, dann mit der Kamera etwas BLAUES finden. Keine Punkte – nur zum Ausprobieren!",
       shakes: 10,
       holdSeconds: 3,
       stillMax: 0.6,
-      note: "Alle Teams: „Sensoren freigeben“ antippen. Bei ⚠ anderes Handy nehmen. Erst weiter, wenn alle ✓ haben."
+      color: "blau",
+      colorSeconds: 1,
+      note: "Alle Teams: „Sensoren & Kamera freigeben“ antippen und BEIDE Abfragen erlauben (Bewegung + Kamera). Bei ⚠ anderes Handy nehmen. Erst weiter, wenn alle ✓ haben."
     },
     {
       type: "challenge",
-      title: "📳 Schütteln & 🫗 Ruhige Hand",
-      text: "Eine Person pro Team nimmt das Team-Handy. Erst 80× kräftig SCHÜTTELN – dann das Handy 8 Sekunden lang FLACH und RUHIG auf der ausgestreckten Hand halten. Wackeln = Ruhephase startet neu! Wer zuerst beides schafft: +30, Zweiter: +15.",
+      title: "📳 Schütteln · 🫗 Ruhige Hand · 🎨 Farbjagd",
+      text: "Eine Person pro Team nimmt das Team-Handy. 1) 80× kräftig SCHÜTTELN. 2) Das Handy 8 Sekunden FLACH und RUHIG auf der ausgestreckten Hand halten – Wackeln = von vorne! 3) Mit der Kamera etwas in der angezeigten FARBE finden und 2 Sekunden draufhalten. Wer zuerst alles schafft: +30, Zweiter: +15.",
       shakes: 80,
       holdSeconds: 8,
       stillMax: 0.6,
-      note: "Vorher: Alle Teams tippen auf dem Handy auf „Sensoren freigeben“ (iPhone fragt nach Erlaubnis). Am Beamer siehst du, wer bereit ist. Handy GUT FESTHALTEN – Hinweis geben! Handy auf den Tisch legen gilt nicht (aufpassen). Platzierung wird automatisch vergeben, kann am Tablet korrigiert werden. Überleitung danach: „Genug gewackelt – zurück auf die große Bühne.“"
+      color: "rot",
+      colorSeconds: 2,
+      note: "Freigaben gelten noch aus der Testrunde. Die Farbe (rot) erfahren die Teams erst in Stufe 3 – also vorher nicht verraten! Am Beamer siehst du, wer bereit ist. Handy GUT FESTHALTEN – Hinweis geben! Handy auf den Tisch legen gilt nicht (aufpassen). Platzierung wird automatisch vergeben, kann am Tablet korrigiert werden. Überleitung danach: „Genug gewackelt – zurück auf die große Bühne.“"
     },
     {
       type: "standings",

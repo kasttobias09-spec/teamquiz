@@ -159,6 +159,7 @@
     } else if (it.type === "challenge") {
       v.title = it.title; v.text = it.text; v.shakes = it.shakes; v.holdSeconds = it.holdSeconds;
       v.stillMax = it.stillMax || 0.6; v.practice = !!it.practice;
+      v.color = it.color || null; v.colorSeconds = it.colorSeconds || 2;
       if (S.phase === "open") v.goInMs = Math.max(0, S.openedAt + GO_DELAY - Date.now());
       const x = chalOf()[id]; v.done = !!(x && x.stage === "done"); v.ready = !!(x && x.ready);
       const a = S.awards[S.idx] || []; const k = a.indexOf(id); v.place = k >= 0 ? k + 1 : null;
@@ -181,7 +182,11 @@
     const it = item();
     if (it.type !== "challenge" || d.idx !== S.idx) return;
     const c = chalOf(), me = (c[id] = c[id] || { stage: "wait", value: 0 });
-    if (d.t === "ready") { me.mode = d.mode === "motion" ? "motion" : "none"; me.ready = me.mode === "motion"; save(); render(); return; }
+    if (d.t === "ready") {
+      me.mode = d.mode === "motion" ? "motion" : "none"; me.cam = !!d.cam;
+      me.ready = me.mode === "motion" && (!it.color || me.cam);
+      save(); render(); return;
+    }
     if (S.phase !== "open" || Date.now() < S.openedAt + GO_DELAY - 300 || me.stage === "done") return;
     if (d.stage === "done") {
       me.stage = "done"; me.value = 0;
@@ -191,13 +196,14 @@
       save(); render(); broadcast();
       return;
     }
-    if (d.stage === "shake" || d.stage === "hold") { me.stage = d.stage; me.value = +d.value || 0; }
+    if (d.stage === "shake" || d.stage === "hold" || d.stage === "color") { me.stage = d.stage; me.value = +d.value || 0; }
     updateBars();
   }
   function chalLabel(it, x) {
     if (!x || x.stage === "wait") return "bereit…";
     if (x.stage === "shake") return `📳 ${x.value}/${it.shakes}`;
     if (x.stage === "hold") return `🫗 ${(x.value / 1000).toFixed(1)} / ${it.holdSeconds} s`;
+    if (x.stage === "color") return `🎨 ${(x.value / 1000).toFixed(1)} / ${it.colorSeconds || 2} s`;
     if (it.practice) return "✓ Test ok";
     return (["🥇", "🥈", "🥉"][x.place - 1] || x.place + ".") + " geschafft!";
   }
@@ -205,12 +211,13 @@
     const it = item(); if (it.type !== "challenge") return;
     const c = chalOf();
     for (const id of S.order) {
-      const x = c[id], sEl = $("cs-" + id), hEl = $("ch-" + id), lEl = $("cl-" + id);
+      const x = c[id], sEl = $("cs-" + id), hEl = $("ch-" + id), cEl = $("cc-" + id), lEl = $("cl-" + id);
       if (!sEl) continue;
       const target = it.shakes;
       const sh = !x ? 0 : x.stage === "shake" ? Math.min(1, x.value / target) : x.stage === "wait" ? 0 : 1;
-      const ho = !x ? 0 : x.stage === "hold" ? Math.min(1, x.value / (it.holdSeconds * 1000)) : x.stage === "done" ? 1 : 0;
-      sEl.style.width = sh * 100 + "%"; hEl.style.width = ho * 100 + "%";
+      const ho = !x ? 0 : x.stage === "hold" ? Math.min(1, x.value / (it.holdSeconds * 1000)) : (x.stage === "done" || x.stage === "color") ? 1 : 0;
+      const co = !x ? 0 : x.stage === "color" ? Math.min(1, x.value / ((it.colorSeconds || 2) * 1000)) : x.stage === "done" ? 1 : 0;
+      sEl.style.width = sh * 100 + "%"; hEl.style.width = ho * 100 + "%"; if (cEl) cEl.style.width = co * 100 + "%";
       lEl.textContent = chalLabel(it, x);
     }
   }
@@ -370,8 +377,8 @@
     let primaryLabel = null; // großer Button unten mittig
     if (showRemote) {
       st.innerHTML = `<div class="lobby"><div class="qr">${qrHtml(remoteUrl())}</div><div>
-        <div class="bigtitle">🎛 Tablet als Fernbedienung</div>
-        <p class="bigtext">QR-Code mit dem Moderator-Tablet scannen.</p>
+        <div class="bigtitle">🎛 Fernbedienung</div>
+        <p class="bigtext">QR-Code mit dem Gerät scannen, das du als Fernbedienung nutzen willst.</p><p class="muted">Reine Anzeige ohne Lösungen (z. B. zweites Tablet für die Teams): <b>${esc(location.href.replace(/[#?].*$/, "").replace(/[^/]*$/, ""))}tablet</b></p>
         <p class="muted">Dort siehst du Lösung, Notizen, Antworten und Punkte und steuerst das Quiz. Der Beamer zeigt nur, was alle sehen dürfen.<br>Diesen Code nicht den Teams zeigen!</p>
         <p class="muted">Verbundene Tablets: <b>${remotes.size}</b></p></div></div>
         <div class="controls"><button class="primary" id="bCloseRemote">Zurück zum Quiz</button></div>`;
@@ -422,15 +429,15 @@
       if (S.phase === "show") {
         primaryLabel = "▶ Los! (3-2-1)";
         html += `<p class="bigtext">${esc(it.text)}</p>
-          <p class="bigtext">👉 Jetzt auf dem Team-Handy <b>„Sensoren freigeben“</b> antippen.</p>
-          <div class="status">${ids.map(id => { const x = c[id]; return `<span class="chip ${x && x.ready ? "done" : ""}">${x && x.ready ? "✓ " : x && x.mode === "none" ? "⚠ " : "… "}${esc(teamName(id))}</span>`; }).join("")}</div>
+          <p class="bigtext">👉 Jetzt auf dem Team-Handy <b>„${it.color ? "Sensoren & Kamera" : "Sensoren"} freigeben“</b> antippen${it.color ? " und beide Abfragen erlauben" : ""}.</p>
+          <div class="status">${ids.map(id => { const x = c[id]; return `<span class="chip ${x && x.ready ? "done" : ""}">${x && x.ready ? "✓ " : x && x.mode === "none" ? "⚠ Sensoren: " : x && x.mode === "motion" && !x.cam ? "⚠ Kamera: " : "… "}${esc(teamName(id))}</span>`; }).join("")}</div>
           <p class="muted">✓ = bereit · … = noch nicht freigegeben · ⚠ = Handy liefert keine Sensordaten → anderes Handy nehmen</p>`;
       } else {
         if (S.phase === "open") html += `<div class="center"><span class="countdown" id="cdown"></span></div>`;
         html += `<div class="crows">${ids.map(id => `<div class="crow"><span class="n">${esc(teamName(id))}</span>
-          <div class="cbar"><div class="half"><div class="cshake" id="cs-${id}"></div></div><div class="half"><div class="chold" id="ch-${id}"></div></div></div>
+          <div class="cbar"><div class="half"><div class="cshake" id="cs-${id}"></div></div><div class="half"><div class="chold" id="ch-${id}"></div></div>${it.color ? `<div class="half"><div class="ccolor" id="cc-${id}"></div></div>` : ""}</div>
           <span class="clabel" id="cl-${id}"></span></div>`).join("")}</div>
-          <p class="muted">Linke Hälfte: 📳 Schütteln · rechte Hälfte: 🫗 ruhig halten</p>`;
+          <p class="muted">📳 Schütteln → 🫗 ruhig halten${it.color ? " → 🎨 Farbe finden" : ""}</p>`;
         if (S.phase === "open") primaryLabel = "Beenden";
         else {
           primaryLabel = "Weiter ▶";
@@ -549,6 +556,35 @@
     }
   }
   setInterval(tick, 200);
+
+  // ---------- Spiegel-Anzeige (/tablet) ----------
+  // Feste ID, damit /tablet ohne Code funktioniert. Zeigt nur die Bühne (ohne Header, Buttons, Seitenleiste).
+  const displays = new Set();
+  let displayPeer = null, lastMirror = "";
+  function startDisplayPeer() {
+    displayPeer = new Peer(TQ.PEER_PREFIX + "display", TQ.peerOptions);
+    displayPeer.on("connection", c => {
+      c.on("open", () => { displays.add(c); lastMirror = ""; mirror(); });
+      c.on("close", () => displays.delete(c));
+    });
+    displayPeer.on("disconnected", () => setTimeout(() => { if (!displayPeer.destroyed && displayPeer.disconnected) displayPeer.reconnect(); }, 2000));
+    displayPeer.on("error", e => {
+      if (e.type === "peer-unavailable") return;
+      if (e.type === "unavailable-id") { displayPeer.destroy(); setTimeout(startDisplayPeer, 5000); return; }
+      setTimeout(() => { if (displayPeer.destroyed) startDisplayPeer(); else if (displayPeer.disconnected) displayPeer.reconnect(); }, 3000);
+    });
+  }
+  function mirror() {
+    if (!displays.size) return;
+    const st = $("stage");
+    const msg = { t: "mirror", html: st.innerHTML, anim: render.anim || "", animAt: render.animAt || 0 };
+    const key = msg.html + msg.anim + msg.animAt;
+    if (key === lastMirror) return;
+    lastMirror = key;
+    for (const c of displays) if (c.open) { try { c.send(msg); } catch {} }
+  }
+  setInterval(mirror, 200);
+  startDisplayPeer();
   setInterval(() => sendRemotes(), item().type === "challenge" ? 1000 : 3000);
   setInterval(() => { if (item().type === "challenge" && S.phase === "open") sendRemotes(); }, 1000);
 
