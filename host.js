@@ -93,7 +93,7 @@
   function onData(conn, d) {
     if (!d || typeof d !== "object") return;
     if (d.t === "remote") {
-      if (d.key !== S.remoteKey) return conn.send({ t: "reject", reason: "Ungültiger Fernbedienungs-Link. Bitte QR-Code neu scannen." });
+      return conn.send({ t: "reject", reason: "Die Fernbedienung ist deaktiviert. Für einen zweiten Bildschirm am Laptop auf „📺 Zweiter Bildschirm“ tippen." });
       conn.isRemote = true; remotes.add(conn);
       conn.on("close", () => { remotes.delete(conn); render(); });
       sendRemote(conn); render();
@@ -355,11 +355,12 @@
 
     let primaryLabel = null; // großer Button unten mittig
     if (showRemote) {
-      st.innerHTML = `<div class="lobby"><div class="qr">${qrHtml(remoteUrl())}</div><div>
-        <div class="bigtitle">🎛 Fernbedienung</div>
-        <p class="bigtext">QR-Code mit dem Gerät scannen, das du als Fernbedienung nutzen willst.</p><p class="muted">Reine Anzeige ohne Lösungen (z. B. zweites Tablet für die Teams): <b>${esc(location.href.replace(/[#?].*$/, "").replace(/[^/]*$/, ""))}tablet</b></p>
-        <p class="muted">Dort siehst du Lösung, Notizen, Antworten und Punkte und steuerst das Quiz. Der Beamer zeigt nur, was alle sehen dürfen.<br>Diesen Code nicht den Teams zeigen!</p>
-        <p class="muted">Verbundene Tablets: <b>${remotes.size}</b></p></div></div>
+      st.innerHTML = `<div class="lobby"><div class="qr">${qrHtml(tabletUrl())}</div><div>
+        <div class="bigtitle">📺 Zweiter Bildschirm</div>
+        <p class="bigtext">QR-Code mit dem Tablet scannen – es zeigt dann dasselbe wie der Beamer, nur ohne Bedienelemente.</p>
+        <p class="joinurl muted">${esc(tabletUrl())}</p>
+        <p class="muted">Keine Lösungen, keine Steuerung – kann problemlos vor dem Publikum stehen. Unten rechts auf dem Tablet gibt es einen Vollbild-Knopf.</p>
+        <p class="muted">Verbundene Anzeigen: <b>${displays.size}</b></p></div></div>
         <div class="controls"><button class="primary" id="bCloseRemote">Zurück zum Quiz</button></div>`;
       $("bCloseRemote").onclick = () => { showRemote = false; render(); };
     } else if (showJoin) {
@@ -464,9 +465,9 @@
     tick();
     sendRemotes();
   }
-  function remoteUrl() {
+  function tabletUrl() {
     const base = location.href.replace(/[#?].*$/, "").replace(/[^/]*$/, "");
-    return base + "remote.html?room=" + S.code + "&key=" + S.remoteKey;
+    return base + "tablet/";
   }
 
   function podium(n) {
