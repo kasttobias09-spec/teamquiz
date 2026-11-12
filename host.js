@@ -25,6 +25,7 @@
   let showJoin = false, showRemote = false, showNotes = false, admin = false;
 
   const item = () => ITEMS[S.idx];
+  const ptsOf = it => (it && it.points) || Q.interactivePoints; // Plätze/Punkte je Aufgabe (z. B. nur [30] = ein Sieger)
   const mult = it => it.multiplier || 1;
 
   function pointsFor(it, choice, elapsedMs) {
@@ -42,7 +43,7 @@
     }
     for (const ii in S.awards) {
       const a = S.awards[ii] || [];
-      Q.interactivePoints.forEach((p, k) => { if (a[k] === id) s += p; });
+      ptsOf(ITEMS[ii]).forEach((p, k) => { if (a[k] === id) s += p; });
     }
     return s;
   }
@@ -193,7 +194,7 @@
       me.stage = "done"; me.value = 0;
       me.place = Object.values(c).filter(x => x.stage === "done").length;
       const a = it.practice ? [] : (S.awards[S.idx] = S.awards[S.idx] || []);
-      if (!it.practice && !a.includes(id)) for (let k = 0; k < Q.interactivePoints.length; k++) if (!a[k]) { a[k] = id; break; }
+      if (!it.practice && !a.includes(id)) for (let k = 0; k < ptsOf(it).length; k++) if (!a[k]) { a[k] = id; break; }
       save(); render(); broadcast();
       return;
     }
@@ -235,7 +236,7 @@
       remainingMs: S.phase === "open" ? Math.max(0, ANS_MS - (Date.now() - S.openedAt)) : null,
       pauseRemainingMs: S.pauseEnd ? Math.max(0, S.pauseEnd - Date.now()) : null,
       awards: S.awards[S.idx] || [],
-      interactivePoints: Q.interactivePoints,
+      interactivePoints: ptsOf(it),
       teams: standings().map(x => ({ ...x, online: conns.has(x.id), answer: ans[x.id] || null,
         chal: it.type === "challenge" ? chalLabel(it, chalOf()[x.id]) + ((chalOf()[x.id] || {}).mode === "none" ? " ⚠ keine Sensoren" : "") : null }))
     };
@@ -243,6 +244,7 @@
   function sendRemote(c) { if (c.open) { try { c.send(remoteView()); } catch {} } }
   function sendRemotes() { if (remotes.size) { const v = remoteView(); for (const c of remotes) if (c.open) { try { c.send(v); } catch {} } } }
   function toggleAward(id, k) {
+    if (!(k >= 0 && k < ptsOf(item()).length)) return;
     const arr = (S.awards[S.idx] || []).slice();
     if (arr[k] === id) arr[k] = null;
     else { for (let j = 0; j < arr.length; j++) if (arr[j] === id) arr[j] = null; arr[k] = id; }
@@ -401,7 +403,7 @@
       primaryLabel = "Weiter ▶";
       st.innerHTML = `${it.img ? `<div class="qimg"><img src="${esc(it.img)}" alt=""></div>` : ""}<div class="category">Interaktive Aufgabe</div><div class="bigtitle">${esc(it.title)}</div><p class="bigtext">${esc(it.text)}</p>
         <div class="award">${ids.map(id => `<span>${esc(teamName(id))}</span>
-          ${Q.interactivePoints.map((p, k) => `<button data-award="${id}" data-k="${k}" class="${a[k] === id ? "sel" : ""}">${k + 1}. Platz</button>`).join("")}`).join("")}</div>`;
+          ${ptsOf(it).map((p, k) => `<button data-award="${id}" data-k="${k}" class="${a[k] === id ? "sel" : ""}">${ptsOf(it).length === 1 ? "🏆 Sieger" : (k + 1) + ". Platz"}</button>`).join("")}`).join("")}</div>`;
       st.querySelectorAll("[data-award]").forEach(b => b.onclick = () => toggleAward(b.dataset.award, +b.dataset.k));
     } else if (it.type === "challenge") {
       const c = chalOf();
