@@ -30,8 +30,10 @@
 <div class="stage" id="stage"></div>
 <div id="wait"><div class="bigtitle">📺 Anzeige</div><p class="muted" id="status">Verbinde mit dem Quiz …</p><p class="muted small">Die Moderationsseite muss auf dem Laptop geöffnet sein.</p></div>
 <button id="fs">⛶ Vollbild</button>
-<script src="vendor/peerjs.min.js"></script>
+<script src="vendor/firebase-app-compat.js"></script>
+<script src="vendor/firebase-database-compat.js"></script>
 <script src="common.js"></script>
+<script src="net.js"></script>
 <script>
 (() => {
   const $ = id => document.getElementById(id);

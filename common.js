@@ -1,5 +1,15 @@
 // Gemeinsame Einstellungen für Host und Teams.
 window.TQ = {
+  // Firebase-Projekt (öffentliche Web-Konfiguration – kein Geheimnis)
+  firebaseConfig: {
+    apiKey: "AIzaSyA5iJX0IAgJxU8GyppCxSZr-u3i1ePFwgs",
+    authDomain: "teamquiz-2820e.firebaseapp.com",
+    databaseURL: "https://teamquiz-2820e-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "teamquiz-2820e",
+    storageBucket: "teamquiz-2820e.firebasestorage.app",
+    messagingSenderId: "848820588792",
+    appId: "1:848820588792:web:5786a641a50bece59fab0d"
+  },
   // Präfix für die PeerJS-ID des Hosts (muss auf dem öffentlichen PeerJS-Server eindeutig sein).
   PEER_PREFIX: "teamquiz-q7x3-",
   peerOptions: {
@@ -29,5 +39,3 @@ window.TQ = {
   }
 };
 
-// Diagnose: mit ?relay=1 in der Adresse wird die Verbindung erzwungen über den Relay-Server aufgebaut.
-if (/[?&]relay=1/.test(location.search)) window.TQ.peerOptions.config.iceTransportPolicy = "relay";

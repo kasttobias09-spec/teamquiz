@@ -51,12 +51,12 @@
       peer = new Peer(TQ.peerOptions);
       setConn(false, "Verbinde mit Server…");
       const p0 = peer;
-      setTimeout(() => { if (!p0.open && !p0.destroyed) { setConn(false, "Server nicht erreichbar"); diag("Schritt 1 hängt: Vermittlungsserver (0.peerjs.com) antwortet nicht – vermutlich im Netz blockiert."); } }, 10000);
+      setTimeout(() => { if (!p0.open && !p0.destroyed) { setConn(false, "Server nicht erreichbar"); diag("Server (Firebase) antwortet nicht – Internetverbindung des Handys prüfen (WLAN/mobile Daten)."); } }, 10000);
       peer.on("open", openConn);
       peer.on("disconnected", () => { setConn(false, "Netz weg…"); setTimeout(() => { if (!peer.destroyed && peer.disconnected) peer.reconnect(); }, 1500); });
       peer.on("error", e => {
-        if (e.type === "peer-unavailable") { setConn(false, "Raum nicht gefunden"); diag("Schritt 2 hängt: Raumcode " + room + " ist nicht online. Ist host.html auf dem Laptop offen und zeigt „● online“? Stimmt der Code?"); }
-        else { setConn(false, "Fehler: " + e.type); diag("Schritt 1 hängt: Vermittlungsserver (0.peerjs.com) nicht erreichbar – Fehler „" + e.type + "“. Vermutlich blockiert das Netzwerk ihn."); }
+        if (e.type === "peer-unavailable") { setConn(false, "Raum nicht gefunden"); diag("Raumcode " + room + " ist nicht online. Ist host.html auf dem Laptop offen und zeigt „● online“? Stimmt der Code?"); }
+        else { setConn(false, "Fehler: " + e.type); diag("Server (Firebase) nicht erreichbar – Internetverbindung des Handys prüfen."); }
         if (["network", "server-error", "socket-error", "socket-closed"].includes(e.type) && peer.destroyed) peer = null;
         retry();
       });
@@ -84,8 +84,8 @@
     setConn(false, "Server ok – suche Raum…");
     const t = setTimeout(() => {
       if (!c.open) {
-        setConn(false, "Direktverbindung blockiert?");
-        diag("Schritt 3 hängt: Raum gefunden, aber die Direktverbindung (WebRTC) kommt nicht zustande – vermutlich blockiert das Netzwerk sie.");
+        setConn(false, "Verbindung langsam…");
+        diag("Verbindung zum Raum dauert ungewöhnlich lange – Internetverbindung prüfen.");
         try { c.close(); } catch {} retry();
       }
     }, 10000);
